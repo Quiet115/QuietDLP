@@ -1,0 +1,44 @@
+{
+ "tag_name": "v1.9.1.1",
+ "draft": false,
+ "prerelease": false,
+ "body": "# Hotfix\r\n\r\n- Fix bottom navigation bar hiding the More button, sorry\r\n- Register application in lrclib lyrics api so its not throttled, also added retry policy\r\n- Made restore settings only accept js",
+ "assets": [
+  {
+   "name": "output-metadata.json",
+   "browser_download_url": "https://github.com/deniscerri/ytdlnis/releases/download/v1.9.1.1/output-metadata.json",
+   "size": 2607,
+   "digest": "sha256:e4c35df62f3a58018a08a95d439af42c9dd3271b09b7ed3bc7772dca933ee3d5"
+  },
+  {
+   "name": "YTDLnis-1.9.1.1-arm64-v8a-release-github.apk",
+   "browser_download_url": "https://github.com/deniscerri/ytdlnis/releases/download/v1.9.1.1/YTDLnis-1.9.1.1-arm64-v8a-release-github.apk",
+   "size": 69952324,
+   "digest": "sha256:bed6c65b8a565f2301d488cf15a87ee87d6c4d3fe16a5eeaf0227dbfc1b1888e"
+  },
+  {
+   "name": "YTDLnis-1.9.1.1-armeabi-v7a-release-github.apk",
+   "browser_download_url": "https://github.com/deniscerri/ytdlnis/releases/download/v1.9.1.1/YTDLnis-1.9.1.1-armeabi-v7a-release-github.apk",
+   "size": 58998606,
+   "digest": "sha256:e3462754a4578bc33fbf2b5068bcf43618557449ff085c90691753020ad722a1"
+  },
+  {
+   "name": "YTDLnis-1.9.1.1-foss-arm64-v8a-release.apk",
+   "browser_download_url": "https://github.com/deniscerri/ytdlnis/releases/download/v1.9.1.1/YTDLnis-1.9.1.1-foss-arm64-v8a-release.apk",
+   "size": 69952104,
+   "digest": "sha256:2b8cb1a7ca9a45df85d6de20611bbc5aa9137f66658e82bf79a7307cfe6ca58b"
+  },
+  {
+   "name": "YTDLnis-1.9.1.1-foss-armeabi-v7a-release.apk",
+   "browser_download_url": "https://github.com/deniscerri/ytdlnis/releases/download/v1.9.1.1/YTDLnis-1.9.1.1-foss-armeabi-v7a-release.apk",
+   "size": 58998390,
+   "digest": "sha256:3923ab3ec094a3fa352fd1d714695eb25e2d1eff4aed1763160a0f15cf11650c"
+  },
+  {
+   "name": "YTDLnis-1.9.1.1-foss-x86-release.apk",
+   "browser_download_url": "https://github.com/deniscerri/ytdlnis/releases/download/v1.9.1.1/YTDLnis-1.9.1.1-foss-x86-release.apk",
+   "size": 64007234,
+   "digest": "sha256:a4cc2179170cffbd6b8a48a14a48dd99f09c3a678c2a533697acf84ce8a608fa"
+  }
+ ]
+}

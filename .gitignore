@@ -1,0 +1,20 @@
+# Gradle / Android
+.gradle/
+build/
+local.properties
+captures/
+*.iml
+.idea/
+.cxx/
+# Firmas: nunca subir claves
+*.jks
+*.keystore
+keystore.properties
+# Sistema
+.DS_Store
+Thumbs.db
+dist/
+replica/
+docs/android-device-access.md
+docs/overnight-report.md
+docs/design-system.md
