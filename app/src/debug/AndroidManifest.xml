@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo para builds de depuración: permite hablar (sin cifrar) con el origen local de actualizaciones que el PC
+     acerca al móvil por USB (tools/dev_update.py). Las versiones de publicación no llevan esto. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config" />
+</manifest>

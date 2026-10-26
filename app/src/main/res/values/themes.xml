@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.QuietDLP" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Transparente y sin animación: la actividad de "Compartir" no se ve. -->
+    <style name="Theme.QuietDLP.Share" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoDisplay">false</item>
+    </style>
+</resources>

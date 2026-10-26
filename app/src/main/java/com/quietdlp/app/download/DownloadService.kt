@@ -1,0 +1,535 @@
+package com.quietdlp.app.download
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.PowerManager
+import android.os.StatFs
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import com.quietdlp.app.MainActivity
+import com.quietdlp.app.Sharing
+import com.quietdlp.app.data.DownloadItem
+import com.quietdlp.app.data.FreeSpace
+import com.quietdlp.app.data.Kind
+import com.quietdlp.app.data.Prefs
+import com.quietdlp.app.data.Quality
+import com.quietdlp.app.data.State
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import java.io.File
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Servicio en primer plano que descarga de uno en uno. Al ser "foreground" Android no lo mata
+ * aunque cierres la app o apagues la pantalla, y se detiene solo cuando no queda nada pendiente.
+ */
+class DownloadService : Service() {
+
+    companion object {
+        private const val ACTION_ENQUEUE = "com.quietdlp.app.ENQUEUE"
+        private const val ACTION_CANCEL = "com.quietdlp.app.CANCEL"
+        private const val EXTRA_URL = "url"
+        private const val EXTRA_TITLE = "title"
+        private const val EXTRA_THUMB = "thumb"
+        private const val EXTRA_KIND = "kind"
+        private const val EXTRA_HEIGHT = "height"
+        private const val EXTRA_AUDIO_FMT = "audio_fmt"
+        private const val EXTRA_AUDIO_BR = "audio_br"
+        private const val EXTRA_ID = "id"
+
+        private const val CH_PROGRESS = "progress"
+        private const val CH_RESULT = "result_quiet"
+        private const val NOTIF_PROGRESS = 1
+        private const val MAX_NET_WAITS = 6
+
+        fun enqueue(
+            ctx: Context,
+            url: String,
+            quality: Quality,
+            title: String? = null,
+            thumbnail: String? = null,
+        ) {
+            val i = Intent(ctx, DownloadService::class.java)
+                .setAction(ACTION_ENQUEUE)
+                .putExtra(EXTRA_URL, url)
+                .putExtra(EXTRA_TITLE, title)
+                .putExtra(EXTRA_THUMB, thumbnail)
+                .putExtra(EXTRA_KIND, quality.kind.name)
+                .putExtra(EXTRA_HEIGHT, quality.maxHeight)
+                .putExtra(EXTRA_AUDIO_FMT, quality.audioFormat)
+                .putExtra(EXTRA_AUDIO_BR, quality.audioBitrate)
+            ContextCompat.startForegroundService(ctx, i)
+        }
+
+        fun cancel(ctx: Context, id: String) {
+            ctx.startService(
+                Intent(ctx, DownloadService::class.java)
+                    .setAction(ACTION_CANCEL)
+                    .putExtra(EXTRA_ID, id),
+            )
+        }
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val queue = Channel<String>(Channel.UNLIMITED)
+    private val pending = AtomicInteger(0)
+    private val cancelled = ConcurrentHashMap.newKeySet<String>()
+    private val main = Handler(Looper.getMainLooper())
+
+    @Volatile
+    private var lastStartId = 0
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var lastNotifMs = 0L
+    private lateinit var prefs: Prefs
+    private lateinit var nm: NotificationManager
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        prefs = Prefs(this)
+        DownloadRepository.init(this)
+        nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        createChannels()
+
+        ServiceCompat.startForeground(
+            this,
+            NOTIF_PROGRESS,
+            baseNotification("QuietDLP", "Getting ready…", -1).build(),
+            if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
+        )
+
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "QuietDLP:download")
+            .apply { acquire(2 * 60 * 60 * 1000L) }
+
+        scope.launch {
+            for (id in queue) {
+                try {
+                    process(id)
+                } finally {
+                    if (pending.decrementAndGet() <= 0) main.post { stopIfIdle() }
+                }
+            }
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
+        when (intent?.action) {
+            ACTION_ENQUEUE -> handleEnqueue(intent)
+            ACTION_CANCEL -> intent.getStringExtra(EXTRA_ID)?.let { handleCancel(it) }
+        }
+        if (pending.get() == 0) stopIfIdle()
+        return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        scope.cancel()
+        queue.close()
+        runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
+        super.onDestroy()
+    }
+
+    private fun stopIfIdle() {
+        if (pending.get() == 0 && stopSelfResult(lastStartId)) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        }
+    }
+
+    private fun handleEnqueue(intent: Intent) {
+        val url = intent.getStringExtra(EXTRA_URL) ?: return
+        val kind = runCatching { Kind.valueOf(intent.getStringExtra(EXTRA_KIND) ?: "") }
+            .getOrDefault(Kind.VIDEO)
+        val quality = Quality(
+            kind = kind,
+            maxHeight = intent.getIntExtra(EXTRA_HEIGHT, 0),
+            audioFormat = intent.getStringExtra(EXTRA_AUDIO_FMT) ?: "m4a",
+            audioBitrate = intent.getIntExtra(EXTRA_AUDIO_BR, 0),
+        )
+        val item = DownloadItem(
+            id = UUID.randomUUID().toString(),
+            url = url,
+            title = intent.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() }
+                ?: UrlUtils.shorten(url),
+            thumbnail = intent.getStringExtra(EXTRA_THUMB),
+            quality = quality,
+        )
+        DownloadRepository.add(item)
+        pending.incrementAndGet()
+        queue.trySend(item.id)
+    }
+
+    private fun handleCancel(id: String) {
+        cancelled.add(id)
+        DownloadRepository.update(id) {
+            if (it.isActive) it.copy(state = State.CANCELED, message = "Canceled") else it
+        }
+        // Matar el proceso bloquea un instante: no hacerlo en el hilo principal.
+        scope.launch {
+            runCatching { YoutubeDL.destroyProcessById(id) }
+            GalleryDl.cancel(id)
+        }
+    }
+
+    // ───────────────────────── descarga ─────────────────────────
+
+    private suspend fun process(id: String) {
+        val item = DownloadRepository.get(id) ?: return
+        if (id in cancelled) {
+            cancelled.remove(id)
+            return
+        }
+        val tmp = File(cacheDir, "dl/$id").apply { mkdirs() }
+        try {
+            var waits = 0
+            while (true) {
+                try {
+                    attempt(item, tmp)
+                    return
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    // Sin internet: esperar a que vuelva y seguir donde se quedó (yt-dlp retoma los .part).
+                    if (id in cancelled || waits >= MAX_NET_WAITS || !Errors.isNetwork(t)) throw t
+                    waits++
+                    val msg = "Waiting for connection…"
+                    setState(id, State.QUEUED, msg)
+                    notifyProgress(item, msg, -1, force = true)
+                    if (!waitForNetwork(id, waits)) throw t
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            if (id in cancelled) {
+                setState(id, State.CANCELED, "Canceled")
+            } else {
+                // Si falta iniciar sesión, la app guía al usuario (aviso + abrir la página de login).
+                val loginHost = if (Errors.isLoginRequired(t)) {
+                    UrlUtils.hostOf(item.url)?.let(UrlUtils::registrableDomain)
+                } else null
+                val hint = if (!prefs.autoUpdate && loginHost == null) " Try updating yt-dlp in Settings." else ""
+                val msg = Errors.friendly(t) + hint
+                ErrorLog.add(applicationContext, item, t)
+                DownloadRepository.update(id) {
+                    it.copy(state = State.FAILED, message = msg, loginHost = loginHost)
+                }
+                notifyResult(
+                    id, item.title, ok = false,
+                    error = if (loginHost != null) "Sign-in required. Tap to continue." else msg,
+                    item = item, loginHost = loginHost,
+                )
+            }
+        } finally {
+            cancelled.remove(id)
+            tmp.deleteRecursively()
+        }
+    }
+
+
+    /** Una pasada completa: preparar, descargar y guardar. Lanza si falla. */
+    private suspend fun attempt(item: DownloadItem, tmp: File) {
+        val id = item.id
+        setState(id, State.PREPARING, "Getting ready…")
+        notifyProgress(item, "Getting ready…", -1, force = true)
+
+        val free = StatFs(cacheDir.absolutePath).availableBytes
+        if (FreeSpace.isLow(free)) error(FreeSpace.message(free))
+
+        Engine.ensureReady(applicationContext)
+        Engine.autoUpdateIfStale(applicationContext, prefs)
+
+        if (item.quality.kind == Kind.PHOTO) {
+            // El usuario eligió fotos (flujo manual): directo a gallery-dl.
+            downloadPhotos(item, tmp)
+        } else {
+            var retried = false
+            while (true) {
+                try {
+                    runYtDlp(item, tmp)
+                    break
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (id in cancelled) throw e
+                    // Sin vídeo (publicación de fotos, galería, web desconocida): probar con gallery-dl.
+                    if (prefs.photosEnabled && Errors.isNoVideo(e)) {
+                        tmp.listFiles()?.forEach { it.deleteRecursively() }
+                        try {
+                            downloadPhotos(item, tmp)
+                            break
+                        } catch (pe: Exception) {
+                            if (id in cancelled) throw pe
+                            // Si gallery-dl pide iniciar sesión se muestra eso; si no, el error original.
+                            throw if (Errors.isLoginRequired(pe)) pe else e
+                        }
+                    }
+                    // Sin internet no es culpa de yt-dlp: lo gestiona la espera de conexión.
+                    if (Errors.isNetwork(e)) throw e
+                    // Casi siempre es yt-dlp desactualizado: actualizar una vez y reintentar.
+                    if (!retried && Engine.canForceUpdate(prefs)) {
+                        retried = true
+                        notifyProgress(item, "Updating yt-dlp…", -1, force = true)
+                        runCatching { Engine.update(applicationContext, prefs) }
+                        continue
+                    }
+                    throw e
+                }
+            }
+            // Una presentación de fotos solo da audio con yt-dlp: si hay fotos, bajarlas también.
+            if (item.quality.kind == Kind.VIDEO && prefs.photosEnabled) addPhotosIfAudioOnly(item, tmp)
+        }
+
+        setState(id, State.PROCESSING, "Saving…")
+        // Una publicación con varios vídeos (p. ej. un carrusel) genera varios archivos:
+        // se guardan todos, no solo el más grande.
+        val files = tmp.listFiles()
+            ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
+            ?.sortedBy { it.name }
+            .orEmpty()
+        if (files.isEmpty()) error("yt-dlp finished but produced no file")
+
+        val savedAll = files.map { MediaSaver.publish(applicationContext, it) }
+        val saved = savedAll.first()
+        val title = Errors.cleanTitle(files.first()) +
+            if (files.size > 1) " (+${files.size - 1} more)" else ""
+        DownloadRepository.update(id) {
+            it.copy(
+                state = State.DONE,
+                progress = 100f,
+                title = title,
+                message = null,
+                savedUris = savedAll.map { it.uri.toString() },
+                mime = saved.mime,
+            )
+        }
+        DownloadIndex.record(applicationContext, item.url, item.quality.kind, savedAll.map { it.uri.toString() })
+        notifyResult(id, title, ok = true, saved = saved, shareUris = savedAll.map { it.uri })
+    }
+
+    /** Espera a que haya internet (hasta 30 min). false = se canceló o se agotó el tiempo. */
+    private suspend fun waitForNetwork(id: String, attempt: Int): Boolean {
+        val deadline = System.currentTimeMillis() + 30 * 60 * 1000L
+        // Si ya hay conexión, el fallo es de la web: pausa más larga en cada intento.
+        if (Connectivity.isOnline(this)) delay(5_000L * attempt)
+        while (System.currentTimeMillis() < deadline) {
+            if (id in cancelled) return false
+            if (Connectivity.isOnline(this)) {
+                delay(2_000)
+                return id !in cancelled
+            }
+            delay(2_000)
+        }
+        return false
+    }
+
+    private val audioExt = setOf("m4a", "mp3", "opus", "aac", "ogg", "wav", "flac", "weba", "mka")
+
+    private fun downloadPhotos(item: DownloadItem, dir: File) {
+        setState(item.id, State.PROCESSING, "Downloading photos…")
+        notifyProgress(item, "Downloading photos…", -1, force = true)
+        GalleryDl.download(applicationContext, item.id, item.url, dir)
+    }
+
+    /** Si yt-dlp solo bajó audio (típico de una presentación de fotos), comprueba si el enlace tiene imágenes y las baja. */
+    private fun addPhotosIfAudioOnly(item: DownloadItem, dir: File) {
+        val files = dir.listFiles()?.filter { it.isFile && !it.name.endsWith(".part") }.orEmpty()
+        if (files.isEmpty() || !files.all { it.extension.lowercase() in audioExt }) return
+        if (item.id in cancelled) return
+        runCatching {
+            if (GalleryDl.countImages(applicationContext, item.url) > 0) downloadPhotos(item, dir)
+        }
+    }
+
+    private fun buildRequest(item: DownloadItem, dir: File): YoutubeDLRequest {
+        val r = YoutubeDLRequest(item.url)
+        // El índice solo aparece en publicaciones con varios vídeos, para que no se pisen entre sí.
+        r.addOption("-o", "${dir.absolutePath}/%(title).100B%(playlist_index& - {}|)s.%(ext)s")
+        r.addOption("--no-playlist")
+        r.addOption("--no-mtime")
+        r.addOption("--windows-filenames")
+        r.addOption("--newline")
+        r.addOption("--concurrent-fragments", 4)
+        // Sesiones guardadas por el usuario. yt-dlp solo envía cada cookie a su propio sitio.
+        CookieStore.mergedPath(applicationContext)?.let { r.addOption("--cookies", it) }
+
+        val q = item.quality
+        if (q.kind == Kind.VIDEO) {
+            // Excluye el formato "con marca de agua" cuando el sitio ofrece también uno limpio.
+            val clean = "[format_note!*=?watermarked]"
+            r.addOption("-f", "bv*$clean+ba/b$clean/bv*+ba/b")
+            // Resolución primero (con tope si se pidió); a igualdad, preferir h264/aac (compatible con todos los móviles).
+            val res = if (q.maxHeight > 0) "res:${q.maxHeight}" else "res"
+            r.addOption("-S", "$res,vcodec:h264,acodec:m4a")
+            r.addOption("--merge-output-format", "mp4")
+        } else {
+            // Con M4A, preferir un audio que ya sea m4a para no recodificar (y perder calidad).
+            r.addOption("-f", if (q.audioFormat == "m4a") "ba[ext=m4a]/ba/b" else "ba/b")
+            r.addOption("-x")
+            r.addOption("--audio-format", q.audioFormat)
+            r.addOption("--audio-quality", if (q.audioBitrate > 0) "${q.audioBitrate}K" else "0")
+            r.addOption("--embed-metadata")
+        }
+        return r
+    }
+
+    private fun runYtDlp(item: DownloadItem, dir: File) {
+        val id = item.id
+        var lastPct = -1f
+        YoutubeDL.execute(buildRequest(item, dir), id) { progress, eta, line ->
+            if (id in cancelled) return@execute
+            val processing = line.contains("[Merger]") || line.contains("[ExtractAudio]") ||
+                line.contains("[VideoConvertor]") || line.contains("[Metadata]")
+            if (processing) {
+                DownloadRepository.update(id) {
+                    it.copy(state = State.PROCESSING, message = "Processing…")
+                }
+                notifyProgress(item, "Processing…", -1)
+            } else if (progress >= 0f && progress != lastPct) {
+                lastPct = progress
+                DownloadRepository.update(id) {
+                    it.copy(
+                        state = State.DOWNLOADING,
+                        progress = progress,
+                        etaSeconds = eta,
+                        message = null,
+                    )
+                }
+                notifyProgress(item, "Downloading… ${progress.toInt()}%", progress.toInt())
+            }
+        }
+    }
+
+    private fun setState(id: String, state: State, message: String?) {
+        DownloadRepository.update(id) { it.copy(state = state, message = message) }
+    }
+
+    // ───────────────────────── notificaciones ─────────────────────────
+
+    private fun createChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        nm.createNotificationChannel(
+            NotificationChannel(CH_PROGRESS, "Downloads in progress", NotificationManager.IMPORTANCE_LOW),
+        )
+        // El canal "result" sonaba (importancia por defecto). Android no deja bajar la importancia
+        // de un canal ya creado, así que se borra y se usa otro silencioso.
+        nm.deleteNotificationChannel("result")
+        nm.createNotificationChannel(
+            NotificationChannel(CH_RESULT, "Finished downloads", NotificationManager.IMPORTANCE_LOW).apply {
+                setSound(null, null)
+                enableVibration(false)
+            },
+        )
+    }
+
+    private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(
+        this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
+    private fun baseNotification(title: String, text: String, percent: Int): NotificationCompat.Builder =
+        NotificationCompat.Builder(this, CH_PROGRESS)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(title.take(60))
+            .setContentText(text)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openAppIntent())
+            .setProgress(100, percent.coerceAtLeast(0), percent < 0)
+
+    private fun notifyProgress(item: DownloadItem, text: String, percent: Int, force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastNotifMs < 700) return
+        lastNotifMs = now
+        val cancelIntent = PendingIntent.getService(
+            this, item.id.hashCode(),
+            Intent(this, DownloadService::class.java)
+                .setAction(ACTION_CANCEL).putExtra(EXTRA_ID, item.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n: Notification = baseNotification(item.title, text, percent)
+            .addAction(0, "Cancel", cancelIntent)
+            .build()
+        runCatching { nm.notify(NOTIF_PROGRESS, n) }
+    }
+
+    private fun notifyResult(
+        id: String,
+        title: String,
+        ok: Boolean,
+        saved: MediaSaver.Saved? = null,
+        error: String? = null,
+        item: DownloadItem? = null,
+        loginHost: String? = null,
+        shareUris: List<Uri> = emptyList(),
+    ) {
+        val contentIntent = if (!ok && item != null && loginHost != null) {
+            // Al tocar el aviso se abre la app directamente con la explicación de inicio de sesión.
+            PendingIntent.getActivity(
+                this, id.hashCode(),
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .putExtra(MainActivity.EXTRA_LOGIN_HOST, loginHost)
+                    .putExtra(MainActivity.EXTRA_RETRY_URL, item.url)
+                    .putExtra(MainActivity.EXTRA_RETRY_ID, item.id)
+                    .putExtra(MainActivity.EXTRA_KIND, item.quality.kind.name)
+                    .putExtra(MainActivity.EXTRA_HEIGHT, item.quality.maxHeight)
+                    .putExtra(MainActivity.EXTRA_AUDIO_FMT, item.quality.audioFormat)
+                    .putExtra(MainActivity.EXTRA_AUDIO_BR, item.quality.audioBitrate),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        } else if (ok && saved != null && saved.uri.scheme == "content") {
+            PendingIntent.getActivity(
+                this, id.hashCode(),
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(saved.uri, saved.mime)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        } else openAppIntent()
+
+        val builder = NotificationCompat.Builder(this, CH_RESULT)
+            .setSmallIcon(
+                if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error,
+            )
+            .setContentTitle(if (ok) "Download complete" else "Download failed")
+            .setContentText(if (ok) title else (error ?: title))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(if (ok) title else (error ?: title)))
+            .setContentIntent(contentIntent)
+            .setAutoCancel(true)
+        if (ok && shareUris.isNotEmpty() && shareUris.all { it.scheme == "content" }) {
+            val share = PendingIntent.getActivity(
+                this, id.hashCode() + 1, Sharing.chooser(shareUris, saved?.mime),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            builder.addAction(0, "Share", share)
+        }
+        runCatching { nm.notify(id.hashCode(), builder.build()) }
+    }
+
+    @Suppress("unused")
+    private fun uriOf(s: String): Uri = Uri.parse(s)
+}
