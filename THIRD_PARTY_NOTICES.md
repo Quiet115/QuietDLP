@@ -16,6 +16,7 @@ QuietDLP is free software under GPL-3.0. It uses and distributes these component
 | [charset-normalizer](https://github.com/jawah/charset_normalizer) | gallery-dl dependency | MIT | https://github.com/jawah/charset_normalizer |
 | Jetpack Compose, AndroidX, Kotlin | UI and language | Apache-2.0 | https://developer.android.com/jetpack |
 | [Coil](https://github.com/coil-kt/coil) | thumbnail loading | Apache-2.0 | https://github.com/coil-kt/coil |
+| [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans) | app typeface (`res/font`) | SIL OFL 1.1, text in `licenses/OFL-PlusJakartaSans.txt` | https://github.com/tokotype/PlusJakartaSans |
 
 ## About gallery-dl (GPL-2.0-only)
 

@@ -14,15 +14,27 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import com.quietdlp.app.R
 
-/** Tipografía de la app. Para cambiar de fuente basta con cambiar esta línea (por ejemplo por una fuente incluida en res/font). */
-private val AppFont = FontFamily.SansSerif
+/** Tipografía de la app. Para cambiar de fuente basta con cambiar este bloque. */
+@OptIn(ExperimentalTextApi::class)
+private fun jakarta(weight: FontWeight) = Font(
+    R.font.plus_jakarta_sans, weight, variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
+)
+
+/** Plus Jakarta Sans (fuente variable incluida en res/font; en Android 7 se ve en un solo grosor). */
+private val AppFont = FontFamily(
+    jakarta(FontWeight.Normal), jakarta(FontWeight.Medium), jakarta(FontWeight.SemiBold), jakarta(FontWeight.Bold),
+)
 
 private fun t(size: Int, weight: FontWeight, line: Int, spacing: Double = 0.0) =
     TextStyle(fontFamily = AppFont, fontSize = size.sp, fontWeight = weight, lineHeight = line.sp, letterSpacing = spacing.sp)

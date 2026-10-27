@@ -101,9 +101,9 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_clip_ms", 0L)
         set(v) = sp.edit().putLong("last_clip_ms", v).apply()
 
-    /** Paleta de colores elegida ("midnight" por defecto; "system" = colores del sistema). */
+    /** Paleta de colores elegida ("obsidian" por defecto; "system" = colores del sistema). */
     var paletteId: String
-        get() = sp.getString("palette", "midnight") ?: "midnight"
+        get() = sp.getString("palette", "obsidian") ?: "obsidian"
         set(v) = sp.edit().putString("palette", v).apply()
 
     /** Paletas creadas por el usuario, en JSON (ver Palettes.encodeCustom). */
