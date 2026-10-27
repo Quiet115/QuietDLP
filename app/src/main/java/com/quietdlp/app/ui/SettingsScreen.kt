@@ -244,7 +244,8 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("♥ Support the project") }
+                    ) { Text("♥ Buy me a buñuelo") }
+                    SwitchRow("Show the support card", "On the main screen, below the link box.", vm.supportCard, vm::changeSupportCard)
                 }
                 Hint("Free software (GPL-3.0). Download only content you have the right to save.")
             }

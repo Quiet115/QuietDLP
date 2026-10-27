@@ -10,7 +10,7 @@ package com.quietdlp.app
  *   la app no busca actualizaciones de sí misma.
  */
 object Links {
-    const val DONATE_URL = ""
+    const val DONATE_URL = "https://ko-fi.com/quiet115"
     const val GITHUB_REPO = "Quiet115/QuietDLP"
     const val SOURCE_URL = "https://github.com/Quiet115/QuietDLP"
 }

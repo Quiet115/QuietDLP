@@ -18,6 +18,10 @@ Early version (0.2). Free and open source (GPL-3.0).
 - **Sessions** for content that requires signing in, or by importing a `cookies.txt`.
 - No ads, no accounts of its own, no telemetry.
 
+## Support
+
+QuietDLP is free. If it is useful to you, you can support it at https://ko-fi.com/quiet115 (also in the app: Settings › About).
+
 ## Build
 
 Requirements: JDK 17 and the Android SDK (platform 35, build-tools 34).
