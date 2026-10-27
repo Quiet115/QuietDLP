@@ -126,6 +126,11 @@ class Prefs(context: Context) {
         get() = sp.getString("folder_uri", "") ?: ""
         set(v) = sp.edit().putString("folder_uri", v).apply()
 
+    /** Mostrar la tarjeta de apoyo en la pantalla principal. Activada por defecto. */
+    var supportCard: Boolean
+        get() = sp.getBoolean("support_card", true)
+        set(v) = sp.edit().putBoolean("support_card", v).apply()
+
     /** Reglas por sitio, en JSON (ver SiteRules.encode). */
     var siteRules: String
         get() = sp.getString("site_rules", "[]") ?: "[]"

@@ -597,6 +597,53 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun cancel(id: String) = DownloadService.cancel(app, id)
+    // ── Búsqueda y selección en el historial ──
+    var searchQuery by mutableStateOf("")
+
+    /** Ids seleccionados (solo se pueden elegir descargas ya terminadas). */
+    var selected by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    fun toggleSelect(id: String) {
+        selected = if (id in selected) selected - id else selected + id
+    }
+
+    fun selectAll(ids: List<String>) {
+        selected = ids.toSet()
+    }
+
+    fun clearSelection() {
+        selected = emptySet()
+    }
+
+    /** Quita varias filas; con [deleteFiles] borra también los archivos de la galería. */
+    fun deleteMany(items: List<DownloadItem>, deleteFiles: Boolean) {
+        clearSelection()
+        if (!deleteFiles) {
+            items.forEach { DownloadRepository.remove(it.id) }
+            return
+        }
+        viewModelScope.launch {
+            var failed = 0
+            for (item in items) {
+                val allGone = withContext(Dispatchers.IO) { item.savedUris.map { MediaFiles.delete(app, it) }.all { it } }
+                if (allGone) DownloadRepository.remove(item.id) else failed++
+            }
+            if (failed > 0) {
+                Toast.makeText(app, "Couldn't delete $failed ${if (failed == 1) "file" else "files"}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ── Tarjeta de apoyo ──
+    var supportCard by mutableStateOf(prefs.supportCard)
+        private set
+
+    fun changeSupportCard(v: Boolean) {
+        supportCard = v
+        prefs.supportCard = v
+    }
+
     fun remove(id: String) = DownloadRepository.remove(id)
     fun clearFinished() = DownloadRepository.clearFinished()
 

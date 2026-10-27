@@ -8,9 +8,12 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +76,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.SubcomposeAsyncImage
+import com.quietdlp.app.Links
 import com.quietdlp.app.LoginActivity
 import com.quietdlp.app.LoginPrompt
 import com.quietdlp.app.MainViewModel
@@ -80,6 +84,7 @@ import com.quietdlp.app.MediaInfo
 import com.quietdlp.app.Sharing
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.DownloadMode
+import com.quietdlp.app.data.HistoryFilter
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.SiteRules
 import com.quietdlp.app.data.State
@@ -94,6 +99,9 @@ fun MainScreen(vm: MainViewModel) {
     val ctx = LocalContext.current
     val downloads by DownloadRepository.items.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
+    val visible = HistoryFilter.filter(downloads, vm.searchQuery)
+    val selecting = vm.selected.isNotEmpty()
+    BackHandler(enabled = selecting && !showSettings) { vm.clearSelection() }
 
     // Al volver de la pantalla de inicio de sesión, refrescar qué cuentas hay guardadas.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshAccounts() }
@@ -128,23 +136,44 @@ fun MainScreen(vm: MainViewModel) {
                 vm.error?.let {
                     item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 }
+                if (vm.supportCard && Links.DONATE_URL.isNotBlank()) item { SupportCard() }
                 item {
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Downloads", style = MaterialTheme.typography.titleMedium)
-                            if (downloads.isNotEmpty()) StatusPill("${downloads.size}", Tone.NEUTRAL)
-                        }
-                        if (downloads.any { !it.isActive }) {
-                            TextButton(onClick = vm::clearFinished) { Text("Clear list") }
+                    if (selecting) {
+                        SelectionBar(vm, visible)
+                    } else {
+                        Row(
+                            Modifier.fillMaxWidth().padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Downloads", style = MaterialTheme.typography.titleMedium)
+                                if (downloads.isNotEmpty()) StatusPill("${downloads.size}", Tone.NEUTRAL)
+                            }
+                            if (downloads.any { !it.isActive }) {
+                                TextButton(onClick = vm::clearFinished) { Text("Clear list") }
+                            }
                         }
                     }
                 }
+                if (downloads.size >= 5 || vm.searchQuery.isNotEmpty()) item {
+                    OutlinedTextField(
+                        value = vm.searchQuery,
+                        onValueChange = { vm.searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search history") },
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
+                        trailingIcon = {
+                            if (vm.searchQuery.isNotEmpty()) TextButton(onClick = { vm.searchQuery = "" }) { Text("Clear") }
+                        },
+                    )
+                }
                 if (downloads.isEmpty()) item { EmptyState() }
-                items(downloads, key = { it.id }) { DownloadRow(it, vm) }
+                else if (visible.isEmpty()) item {
+                    Text("No matches.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(visible, key = { it.id }) { DownloadRow(it, vm, selecting, it.id in vm.selected) }
             }
         }
 
@@ -195,6 +224,81 @@ private fun EmptyState() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** Tarjeta de apoyo entre el enlace y las descargas: un guiño, con el enlace a la página de apoyo. */
+@Composable
+private fun SupportCard() {
+    val ctx = LocalContext.current
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+    ) {
+        Row(
+            Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Buy me a buñuelo", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "QuietDLP is free. A small tip keeps it going.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Button(onClick = {
+                runCatching {
+                    ctx.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(Links.DONATE_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }) { Text("♥ Tip") }
+        }
+    }
+}
+
+/** Barra que sustituye al título de "Downloads" cuando hay descargas seleccionadas. */
+@Composable
+private fun SelectionBar(vm: MainViewModel, visible: List<DownloadItem>) {
+    val ctx = LocalContext.current
+    val chosen = visible.filter { it.id in vm.selected }
+    var askDelete by remember { mutableStateOf(false) }
+    if (askDelete) {
+        AlertDialog(
+            onDismissRequest = { askDelete = false },
+            title = { Text("Remove ${chosen.size} ${if (chosen.size == 1) "item" else "items"}") },
+            text = { Text("Remove them from the list only, or delete the files too.") },
+            confirmButton = {
+                TextButton(onClick = { askDelete = false; vm.deleteMany(chosen, deleteFiles = false) }) { Text("List only") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { askDelete = false }) { Text("Cancel") }
+                    TextButton(onClick = { askDelete = false; vm.deleteMany(chosen, deleteFiles = true) }) { Text("Delete files too") }
+                }
+            },
+        )
+    }
+    val uris = chosen.filter { it.state == State.DONE }.flatMap { it.savedUris }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text("${chosen.size} selected", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+        TextButton(onClick = { vm.selectAll(visible.filter { !it.isActive }.map { it.id }) }) { Text("All") }
+        if (uris.isNotEmpty()) {
+            IconButton(onClick = {
+                runCatching { ctx.startActivity(Sharing.chooser(uris.map(Uri::parse), null)) }
+            }) { Icon(Icons.Default.Share, contentDescription = "Share") }
+        }
+        IconButton(onClick = { askDelete = true }, enabled = chosen.isNotEmpty()) {
+            Icon(Icons.Default.Delete, contentDescription = "Remove")
+        }
+        TextButton(onClick = vm::clearSelection) { Text("Cancel") }
     }
 }
 
@@ -461,8 +565,9 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DownloadRow(item: DownloadItem, vm: MainViewModel) {
+private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolean, isSelected: Boolean) {
     val ctx = LocalContext.current
     var askDelete by remember { mutableStateOf(false) }
     if (askDelete) {
@@ -483,9 +588,15 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel) {
     }
 
     Card(
-        Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        Modifier.fillMaxWidth().combinedClickable(
+            onClick = { if (selecting && !item.isActive) vm.toggleSelect(item.id) },
+            onLongClick = { if (!item.isActive) vm.toggleSelect(item.id) },
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+        else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -518,7 +629,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel) {
                         else -> {}
                     }
 
-                    Row(
+                    if (!selecting) Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
                         verticalAlignment = Alignment.CenterVertically,
