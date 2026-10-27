@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -46,6 +48,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -256,7 +259,7 @@ private fun SitesSection(vm: MainViewModel) {
     var editing by remember { mutableStateOf<SiteRule?>(null) }
     var adding by remember { mutableStateOf(false) }
     SectionCard("Sites") {
-        Hint("Always use one choice for a website. It beats the default download.")
+        Hint("Pick a website and always download the same thing from it, whatever the default is. Example: audio from a music site.")
         vm.siteRules.forEach { rule ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { editing = rule }.padding(vertical = 6.dp),
@@ -405,54 +408,113 @@ private fun AppearanceSection(vm: MainViewModel) {
     }
 }
 
-/** Crea o edita una paleta propia con tres deslizadores y una vista previa en vivo. */
+/** Crea o edita una paleta propia: cuatro colores a elegir, con un punto de partida sugerido. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PaletteEditor(initial: PaletteSpec?, onDismiss: () -> Unit, onSave: (PaletteSpec) -> Unit) {
+    val start = initial ?: Palettes.presets.first()
     var name by remember { mutableStateOf(initial?.name ?: "") }
-    var dark by remember { mutableStateOf(initial?.dark ?: true) }
-    var accent by remember { mutableFloatStateOf((initial?.accentHue ?: 170).toFloat()) }
-    var bg by remember { mutableFloatStateOf((initial?.backgroundHue ?: 220).toFloat()) }
-    var tint by remember { mutableFloatStateOf((initial?.tint ?: 40).toFloat()) }
+    var bg by remember { mutableIntStateOf(start.background) }
+    var surface by remember { mutableIntStateOf(start.surface) }
+    var accent by remember { mutableIntStateOf(start.accent) }
+    var accent2 by remember { mutableIntStateOf(start.accent2) }
+    var open by remember { mutableIntStateOf(-1) }
+    var dark by remember { mutableStateOf(start.dark) }
+    var hue by remember { mutableFloatStateOf(Palettes.toHsv(start.accent)[0]) }
     val id = remember { initial?.id ?: "c" + System.currentTimeMillis() }
-    val preview = Palettes.custom(id, name, dark, accent.toInt(), bg.toInt(), tint.toInt())
+    val preview = Palettes.fromColors(id, name, bg, surface, accent, accent2)
+    val scheme = Palettes.scheme(preview)
+
+    fun suggest() {
+        val c = Palettes.suggest(dark, hue.toInt(), hue.toInt(), 40)
+        bg = c[0]; surface = c[1]; accent = c[2]; accent2 = c[3]
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "New palette" else "Edit palette") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name, onValueChange = { name = it.take(20) },
                     label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Dark", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                    Switch(checked = dark, onCheckedChange = { dark = it })
-                }
-                // Vista previa: fondo, tarjeta y los dos colores de acento.
+                // Vista previa con los colores elegidos; el texto toma solo el color de mejor contraste.
                 Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(preview.background)).padding(12.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(preview.surface)).padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(preview.surface)).padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Color(preview.accent)))
-                        Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(Color(preview.accent2)))
-                        Text(
-                            "QuietDLP", color = if (dark) Color(0xFFE7EBF1) else Color(0xFF14181F),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
+                        Text("QuietDLP", color = scheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                        Text("Save a video, song or photos", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.clip(CircleShape).background(Color(preview.accent)).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                                Text("Download", color = scheme.onPrimary, style = MaterialTheme.typography.labelLarge)
+                            }
+                            Box(Modifier.clip(CircleShape).background(Color(preview.accent2)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                                Text("Done", color = scheme.onSecondary, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
                     }
                 }
-                Text("Accent color", style = MaterialTheme.typography.labelMedium)
-                Slider(value = accent, onValueChange = { accent = it }, valueRange = 0f..359f)
-                Text("Background color", style = MaterialTheme.typography.labelMedium)
-                Slider(value = bg, onValueChange = { bg = it }, valueRange = 0f..359f)
-                Text("Background tint", style = MaterialTheme.typography.labelMedium)
-                Slider(value = tint, onValueChange = { tint = it }, valueRange = 0f..100f)
+
+                Text("Start from", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    QuietChip(dark, { dark = true; suggest() }, "Dark")
+                    QuietChip(!dark, { dark = false; suggest() }, "Light")
+                }
+                Slider(value = hue, onValueChange = { hue = it; suggest() }, valueRange = 0f..359f)
+
+                Text("Colors", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                ColorRow("Background", bg, open == 0, { open = if (open == 0) -1 else 0 }) { bg = it }
+                ColorRow("Cards", surface, open == 1, { open = if (open == 1) -1 else 1 }) { surface = it }
+                ColorRow("Accent", accent, open == 2, { open = if (open == 2) -1 else 2 }) { accent = it }
+                ColorRow("Second accent", accent2, open == 3, { open = if (open == 3) -1 else 3 }) { accent2 = it }
+                Hint("Text color is chosen automatically for the best contrast.")
             }
         },
         confirmButton = { TextButton(onClick = { onSave(preview) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** Una fila de color: muestra el color y, al tocarla, deja ajustarlo con deslizadores o escribiendo su código. */
+@Composable
+private fun ColorRow(label: String, color: Int, expanded: Boolean, onToggle: () -> Unit, onChange: (Int) -> Unit) {
+    val hsv = Palettes.toHsv(color)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                Modifier.size(34.dp).clip(CircleShape).background(Color(color))
+                    .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+            )
+            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            Text(Palettes.toHex(color), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (expanded) {
+            Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 6.dp)) {
+                Text("Hue", style = MaterialTheme.typography.labelSmall)
+                Slider(value = hsv[0], onValueChange = { onChange(Palettes.hsv(it, hsv[1], hsv[2])) }, valueRange = 0f..359f)
+                Text("Saturation", style = MaterialTheme.typography.labelSmall)
+                Slider(value = hsv[1], onValueChange = { onChange(Palettes.hsv(hsv[0], it, hsv[2])) }, valueRange = 0f..1f)
+                Text("Brightness", style = MaterialTheme.typography.labelSmall)
+                Slider(value = hsv[2], onValueChange = { onChange(Palettes.hsv(hsv[0], hsv[1], it)) }, valueRange = 0f..1f)
+                var hex by remember(color) { mutableStateOf(Palettes.toHex(color)) }
+                OutlinedTextField(
+                    value = hex,
+                    onValueChange = { v ->
+                        hex = v.take(7)
+                        Palettes.parseHex(hex)?.let(onChange)
+                    },
+                    label = { Text("Code") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
 }
