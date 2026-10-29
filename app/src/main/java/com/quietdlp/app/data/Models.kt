@@ -58,6 +58,9 @@ data class DownloadItem(
     val loginHost: String? = null,
     /** Una publicación de fotos que trajo su canción: se puede hacer un vídeo con las dos cosas. */
     val photoVideo: Boolean = false,
+    /** El trozo de la canción que eligió el autor (dónde empieza y cuánto dura); 0 si no se pudo leer. */
+    val clipStartMs: Long = 0L,
+    val clipLengthMs: Long = 0L,
 ) {
     val savedUri: String? get() = savedUris.firstOrNull()
 
