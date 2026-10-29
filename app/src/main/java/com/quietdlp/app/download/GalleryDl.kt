@@ -1,6 +1,7 @@
 package com.quietdlp.app.download
 
 import android.content.Context
+import com.quietdlp.app.data.SongClip
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
@@ -67,12 +68,61 @@ object GalleryDl {
     private fun cookiesArgs(ctx: Context): List<String> =
         CookieStore.mergedPath(ctx)?.let { listOf("--cookies", it) }.orEmpty()
 
+    /**
+     * Arranque de gallery-dl. Hace lo mismo que `python -m gallery_dl`, pero antes añade a los metadatos de las
+     * publicaciones de Instagram la parte de la canción que eligió el autor (dónde empieza y cuánto dura), que
+     * gallery-dl no publica por sí solo. Si algo no encaja (otra versión de gallery-dl), no hace nada y todo sigue igual.
+     */
+    private const val WRAPPER = """import sys
+try:
+    from gallery_dl.extractor import instagram as _ig
+    _orig = _ig.InstagramExtractor._extract_audio
+
+    def _extract_audio(self, src, dest, info):
+        try:
+            c = (info or {}).get("music_consumption_info") or {}
+            dest["audio_clip_start_ms"] = c.get("audio_asset_start_time_in_ms")
+            dest["audio_clip_length_ms"] = c.get("overlap_duration_in_ms")
+            dest["audio_clip_raw"] = c
+        except Exception:
+            pass
+        return _orig(self, src, dest, info)
+
+    _ig.InstagramExtractor._extract_audio = _extract_audio
+except Exception:
+    pass
+import gallery_dl
+sys.exit(gallery_dl.main())
+"""
+
+    private fun wrapper(ctx: Context): File {
+        val f = File(ctx.filesDir, "gdl_run.py")
+        if (!f.exists() || f.readText() != WRAPPER) f.writeText(WRAPPER)
+        return f
+    }
+
+    /** Lo que se leyó del trozo de canción de cada descarga de Instagram: el trozo (si se pudo) y los datos crudos. */
+    private val clips = ConcurrentHashMap<String, Pair<SongClip?, String?>>()
+
+    fun takeClip(id: String): Pair<SongClip?, String?>? = clips.remove(id)
+
+    private fun readClip(id: String, dir: File) {
+        var clip: SongClip? = null
+        var raw: String? = null
+        dir.listFiles()?.filter { it.name.endsWith(".json") }?.forEach { f ->
+            val text = runCatching { f.readText() }.getOrNull() ?: return@forEach
+            if (clip == null) clip = SongClip.parse(text)
+            if (raw == null) raw = SongClip.rawOf(text)
+        }
+        clips[id] = clip to raw
+    }
+
     private fun builder(ctx: Context, args: List<String>): ProcessBuilder {
         ensureInstalled(ctx)
         val py = File(packages(ctx), "python/usr")
         val ff = File(packages(ctx), "ffmpeg/usr")
         val libpython = File(ctx.applicationInfo.nativeLibraryDir, "libpython.so")
-        val pb = ProcessBuilder(listOf(libpython.absolutePath, "-m", "gallery_dl") + args)
+        val pb = ProcessBuilder(listOf(libpython.absolutePath, wrapper(ctx).absolutePath) + args)
             .redirectErrorStream(true)
             .directory(ctx.filesDir)
         pb.environment().apply {
@@ -110,9 +160,15 @@ object GalleryDl {
         dir.mkdirs()
         // En Instagram, una publicación de fotos puede traer una canción: "merged" la baja directamente como un
         // archivo más (el otro modo usaría yt-dlp, que gallery-dl no tiene aquí).
+        val instagram = url.contains("instagram.com", ignoreCase = true)
+        // En Instagram se piden también los metadatos (un .json por archivo) para leer el trozo de canción elegido.
         val args = listOf("-D", dir.absolutePath, "--no-mtime", "--range", MAX_ITEMS, "-o", "extractor.instagram.audio=merged") +
-            cookiesArgs(ctx) + url
+            (if (instagram) listOf("--write-metadata") else emptyList()) + cookiesArgs(ctx) + url
         val (code, out) = exec(ctx, args, id)
+        if (instagram) {
+            readClip(id, dir)
+            dir.listFiles()?.filter { it.name.endsWith(".json") }?.forEach { it.delete() }
+        }
         val files = dir.listFiles()
             ?.filter { it.isFile && !it.name.endsWith(".part") }
             ?.sortedBy { it.name }

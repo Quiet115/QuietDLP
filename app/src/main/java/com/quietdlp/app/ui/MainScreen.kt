@@ -654,7 +654,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
     }
     var askVideo by rememberSaveable { mutableStateOf(false) }
     if (askVideo) {
-        MakeVideoDialog(vm.songSeconds, vm.rememberSong, onDismiss = { askVideo = false }) { seconds, remember ->
+        MakeVideoDialog(vm.songSeconds, vm.rememberSong, item.clipLengthMs, onDismiss = { askVideo = false }) { seconds, remember ->
             askVideo = false
             vm.makeVideo(item, seconds, remember)
         }
@@ -796,7 +796,9 @@ private fun LinkMenu(link: String) {
 /** Ventana de "Make video": hasta cuándo suena la canción. Empieza con la última elección. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MakeVideoDialog(current: Int, rememberChoice: Boolean, onDismiss: () -> Unit, onMake: (Int, Boolean) -> Unit) {
+private fun MakeVideoDialog(
+    current: Int, rememberChoice: Boolean, clipLengthMs: Long, onDismiss: () -> Unit, onMake: (Int, Boolean) -> Unit,
+) {
     var picked by remember { mutableStateOf(current) }
     var remembered by remember { mutableStateOf(rememberChoice) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -808,8 +810,18 @@ private fun MakeVideoDialog(current: Int, rememberChoice: Boolean, onDismiss: ()
                 Text("How long should the song play?", style = MaterialTheme.typography.labelMedium, color = muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Slideshow.SONG_LENGTHS.forEach { (seconds, label) ->
-                        QuietChip(picked == seconds, { picked = seconds }, label)
+                        // "As posted" muestra cuánto dura el trozo del autor, cuando se sabe.
+                        val shown = if (seconds == Slideshow.AS_POSTED && clipLengthMs > 0) {
+                            "$label (${formatDuration((clipLengthMs / 1000).toInt())})"
+                        } else label
+                        QuietChip(picked == seconds, { picked = seconds }, shown)
                     }
+                }
+                if (picked == Slideshow.AS_POSTED && clipLengthMs <= 0) {
+                    Text(
+                        "This post doesn't say which part, so the whole song plays.",
+                        style = MaterialTheme.typography.bodySmall, color = muted,
+                    )
                 }
                 Text(
                     "Each photo shows for at least 3 seconds. A cut song fades out.",

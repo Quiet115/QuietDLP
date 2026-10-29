@@ -137,7 +137,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Song length in videos", style = MaterialTheme.typography.titleSmall)
-                    Hint("How long the song plays when you make a video from photos.")
+                    Hint("How long the song plays in a video from photos. As posted is the part the author chose, when the post says.")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Slideshow.SONG_LENGTHS.forEach { (seconds, label) ->
                             QuietChip(vm.songSeconds == seconds, { vm.changeSongSeconds(seconds) }, label)

@@ -32,6 +32,15 @@ class HistoryJsonTest {
     }
 
     @Test
+    fun songClipSurvivesAndOldHistoryHasNone() {
+        val clipped = item("c", State.DONE).copy(photoVideo = true, clipStartMs = 30_000, clipLengthMs = 45_000)
+        val back = HistoryJson.decode(HistoryJson.encode(listOf(clipped, item("d", State.DONE))))
+        assertEquals(30_000L, back[0].clipStartMs)
+        assertEquals(45_000L, back[0].clipLengthMs)
+        assertEquals(0L, back[1].clipLengthMs)
+    }
+
+    @Test
     fun conversionsAreRecognizedByTheirUrl() {
         assertTrue(item("a", State.DONE).copy(url = CONVERT_URL_PREFIX + "content://x").isConversion)
         assertTrue(!item("a", State.DONE).isConversion)

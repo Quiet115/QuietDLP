@@ -43,13 +43,51 @@ class SlideshowTest {
     }
 
     @Test
-    fun songLengthChoicesStartWithTheWholeSong() {
+    fun songLengthChoicesStartWithAsPostedThenTheWholeSong() {
         val seconds = Slideshow.SONG_LENGTHS.map { it.first }
-        assertEquals(0, seconds.first())
+        assertEquals(Slideshow.AS_POSTED, seconds[0])
+        assertEquals(0, seconds[1])
         assertEquals(seconds.size, seconds.toSet().size)
-        // Después de "entera", de más larga a más corta.
-        assertEquals(seconds.drop(1).sortedDescending(), seconds.drop(1))
+        // Después, de más larga a más corta.
+        assertEquals(seconds.drop(2).sortedDescending(), seconds.drop(2))
         assertTrue(Slideshow.SONG_LENGTHS.all { it.second.isNotBlank() })
+    }
+
+    @Test
+    fun asPostedUsesTheAuthorsClipWhenKnown() {
+        // Archivo de 88,9 s; el autor eligió 45 s desde el segundo 30.
+        val p = Slideshow.audioPlan(88_900, Slideshow.AS_POSTED, 30_000, 45_000)
+        assertEquals(30_000L, p.startMs)
+        assertEquals(58_900L, p.availableMs)
+        assertEquals(45, p.maxSeconds)
+        // El trozo no cabe entero: se recorta a lo que queda del archivo.
+        val tail = Slideshow.audioPlan(88_900, Slideshow.AS_POSTED, 80_000, 45_000)
+        assertEquals(80_000L, tail.startMs)
+        assertEquals(9, tail.maxSeconds)
+        // Un inicio más allá del final no rompe nada.
+        assertEquals(87_900L, Slideshow.audioPlan(88_900, Slideshow.AS_POSTED, 500_000, 45_000).startMs)
+    }
+
+    @Test
+    fun withoutAClipOrWithAnotherChoiceTheSongStartsAtTheBeginning() {
+        val none = Slideshow.audioPlan(88_900, Slideshow.AS_POSTED, 0, 0)
+        assertEquals(0L, none.startMs)
+        assertEquals(0, none.maxSeconds)
+        assertEquals(88_900L, none.availableMs)
+        val whole = Slideshow.audioPlan(88_900, 0, 30_000, 45_000)
+        assertEquals(0L, whole.startMs)
+        assertEquals(0, whole.maxSeconds)
+        val cut = Slideshow.audioPlan(88_900, 30, 30_000, 45_000)
+        assertEquals(0L, cut.startMs)
+        assertEquals(30, cut.maxSeconds)
+    }
+
+    @Test
+    fun theCommandSeeksIntoTheSongOnlyWhenAsked() {
+        val c = Slideshow.command(listOf("a.jpg"), "s.m4a", "o.mp4", 640, 800, 45.0, audioStartSec = 30.0)
+        assertEquals("30.000", c[c.indexOf("-ss") + 1])
+        assertEquals("-ss", c[c.lastIndexOf("-i") - 2])
+        assertTrue("-ss" !in Slideshow.command(listOf("a.jpg"), "s.m4a", "o.mp4", 640, 800, 45.0))
     }
 
     @Test

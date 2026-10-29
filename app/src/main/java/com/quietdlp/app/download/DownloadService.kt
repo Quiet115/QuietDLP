@@ -140,7 +140,10 @@ class DownloadService : Service() {
     private val convertJobs = ConcurrentHashMap<String, ConvertJob>()
 
     /** Lo mismo para un vídeo hecho con las fotos de una publicación y su canción. */
-    private class SlideshowJob(val imageUris: List<String>, val audioUri: String, val sourceTitle: String, val maxSeconds: Int)
+    private class SlideshowJob(
+        val imageUris: List<String>, val audioUri: String, val sourceTitle: String, val maxSeconds: Int,
+        val clipStartMs: Long, val clipLengthMs: Long,
+    )
 
     private val slideshowJobs = ConcurrentHashMap<String, SlideshowJob>()
 
@@ -268,7 +271,7 @@ class DownloadService : Service() {
             thumbnail = source.thumbnail,
             quality = Quality(Kind.VIDEO),
         )
-        slideshowJobs[item.id] = SlideshowJob(images, audio, source.title, maxSeconds)
+        slideshowJobs[item.id] = SlideshowJob(images, audio, source.title, maxSeconds, source.clipStartMs, source.clipLengthMs)
         DownloadRepository.add(item)
         pending.incrementAndGet()
         queue.trySend(item.id)
@@ -394,14 +397,15 @@ class DownloadService : Service() {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(images.first().absolutePath, bounds)
         val (w, h) = Slideshow.canvas(bounds.outWidth, bounds.outHeight)
-        val audioMs = MediaKinds.durationMs(audio)
-        val seconds = Slideshow.secondsPerImage(audioMs, images.size, job.maxSeconds)
+        // Qué parte de la canción suena: la que eligió el autor, la entera o hasta cierto tiempo.
+        val song = Slideshow.audioPlan(MediaKinds.durationMs(audio), job.maxSeconds, job.clipStartMs, job.clipLengthMs)
+        val seconds = Slideshow.secondsPerImage(song.availableMs, images.size, song.maxSeconds)
         val totalMs = Slideshow.totalMs(images.size, seconds)
         val out = File(tmp, Slideshow.outputName(job.sourceTitle))
         Plan(
             Slideshow.command(
                 images.map { it.absolutePath }, audio.absolutePath, out.absolutePath, w, h, seconds,
-                fadeOut = Slideshow.cutsSong(audioMs, totalMs),
+                fadeOut = Slideshow.cutsSong(song.availableMs, totalMs), audioStartSec = song.startMs / 1000.0,
             ),
             out, totalMs,
         )
@@ -542,6 +546,14 @@ class DownloadService : Service() {
         } else found
         val photoVideo = hasPhotos && files.any { !MediaKinds.isImage(it) && MediaKinds.isAudioOnly(it) }
 
+        // El trozo de canción que eligió el autor, si gallery-dl lo dio. Si hay canción pero no trozo, los datos crudos
+        // van al registro de errores para poder ver qué trae Instagram.
+        val clipInfo = GalleryDl.takeClip(id)
+        val clip = if (photoVideo) clipInfo?.first else null
+        if (photoVideo && clip == null) {
+            clipInfo?.second?.let { ErrorLog.add(applicationContext, item, Exception("Song clip not found. Data: $it")) }
+        }
+
         val savedAll = files.map { MediaSaver.publish(applicationContext, it) }
         val saved = savedAll.first()
         val title = Errors.cleanTitle(files.first()) +
@@ -555,6 +567,8 @@ class DownloadService : Service() {
                 savedUris = savedAll.map { it.uri.toString() },
                 mime = saved.mime,
                 photoVideo = photoVideo,
+                clipStartMs = clip?.startMs ?: 0L,
+                clipLengthMs = clip?.lengthMs ?: 0L,
             )
         }
         DownloadIndex.record(applicationContext, item.url, item.quality.kind, savedAll.map { it.uri.toString() })
