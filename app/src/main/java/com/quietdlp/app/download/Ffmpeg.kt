@@ -13,7 +13,16 @@ import java.util.concurrent.ConcurrentHashMap
 object Ffmpeg {
     private val running = ConcurrentHashMap<String, Process>()
 
-    private fun libs(ctx: Context) = File(ctx.noBackupFilesDir, "youtubedl-android/packages/ffmpeg/usr/lib")
+    private fun packages(ctx: Context) = File(ctx.noBackupFilesDir, "youtubedl-android/packages")
+
+    /**
+     * Dónde buscar las bibliotecas de ffmpeg. Varias (libc++_shared, libcrypto, libexpat…) no vienen en su
+     * paquete sino en el de Python, así que van las dos carpetas, en el mismo orden que usa yt-dlp.
+     */
+    fun libraryPath(ctx: Context): String {
+        val root = packages(ctx)
+        return "${File(root, "python/usr/lib").path}:${File(root, "ffmpeg/usr/lib").path}"
+    }
 
     /**
      * Ejecuta ffmpeg con [command] (sin el nombre del programa). [onPercent] recibe 0..99 mientras avanza
@@ -25,7 +34,7 @@ object Ffmpeg {
             .redirectErrorStream(true)
             .directory(ctx.cacheDir)
         pb.environment().apply {
-            put("LD_LIBRARY_PATH", libs(ctx).path)
+            put("LD_LIBRARY_PATH", libraryPath(ctx))
             put("TMPDIR", ctx.cacheDir.path)
         }
         val p = pb.start()

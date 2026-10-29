@@ -31,6 +31,13 @@ class FfmpegOutputTest {
         )
         assertEquals("Unknown encoder 'libfoo'", FfmpegOutput.errorLine(lines))
         assertEquals("ffmpeg failed", FfmpegOutput.errorLine(listOf("frame=0", "progress=end")))
+        // El mensaje del cargador no debe esconder la causa detrás de la ruta de la app.
+        val linker = """CANNOT LINK EXECUTABLE "/data/app/~~x==/com.quietdlp.app-y==/lib/arm64/libffmpeg.so": """ +
+            """library "libc++_shared.so" not found: needed by /a/librubberband.so"""
+        assertEquals(
+            """Can't start ffmpeg: library "libc++_shared.so" not found: needed by /a/librubberband.so""",
+            FfmpegOutput.errorLine(listOf(linker, "")),
+        )
         assertEquals(200, FfmpegOutput.errorLine(listOf("x".repeat(500))).length)
     }
 }
