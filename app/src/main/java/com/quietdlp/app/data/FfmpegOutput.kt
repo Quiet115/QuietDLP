@@ -23,5 +23,10 @@ object FfmpegOutput {
     /** La última línea que no es de progreso: casi siempre la causa del error. */
     fun errorLine(lines: List<String>): String =
         lines.map { it.trim() }.lastOrNull { it.isNotEmpty() && !PROGRESS_LINE.matches(it) }
-            ?.take(200) ?: "ffmpeg failed"
+            ?.let(::withoutLinkerPath)?.take(200) ?: "ffmpeg failed"
+
+    // El cargador de Android escribe la ruta entera de la app antes de la causa; la causa es lo útil.
+    private val LINKER = Regex("""^CANNOT LINK EXECUTABLE ".*?":\s*""")
+
+    private fun withoutLinkerPath(line: String) = line.replace(LINKER, "Can't start ffmpeg: ")
 }
