@@ -417,6 +417,21 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Cada vez que sube, la pantalla principal vuelve arriba (para que se vea la tarjeta del enlace analizado). */
+    var scrollTopRequest by mutableIntStateOf(0)
+        private set
+
+    /**
+     * "Download again": pone el enlace de una descarga de la lista en la caja de arriba y lo analiza, para poder
+     * elegir otra vez el formato o la calidad. Si el archivo sigue en el móvil, al descargar sale el aviso de duplicado.
+     */
+    fun downloadAgain(item: DownloadItem) {
+        if (item.isConversion) return
+        clipOffer = null
+        analyze(item.url)
+        scrollTopRequest++
+    }
+
     fun analyze(raw: String) {
         val u = UrlUtils.extract(raw)
         if (u == null) {

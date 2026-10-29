@@ -68,6 +68,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -135,6 +136,12 @@ fun MainScreen(vm: MainViewModel) {
         if (needed.isNotEmpty()) permLauncher.launch(needed.toTypedArray())
     }
 
+    // "Download again" analiza el enlace arriba del todo: la lista vuelve al principio para que se vea.
+    val listState = rememberLazyListState()
+    LaunchedEffect(vm.scrollTopRequest) {
+        if (vm.scrollTopRequest > 0) listState.animateScrollToItem(0)
+    }
+
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             topBar = { MainTopBar(vm) { showSettings = true } },
@@ -159,6 +166,7 @@ fun MainScreen(vm: MainViewModel) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                         LazyColumn(
                             Modifier.widthIn(max = Layouts.MAX_SINGLE_COLUMN_DP.dp).fillMaxWidth().fillMaxHeight(),
+                            state = listState,
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
@@ -717,7 +725,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                         when {
                             item.isActive -> TextButton(onClick = { vm.cancel(item.id) }) { Text("Cancel") }
                             item.state == State.DONE -> {
-                                if (!item.isConversion) LinkMenu(item.url)
+                                if (!item.isConversion) LinkMenu(item.url) { vm.downloadAgain(item) }
                                 if (item.savedUris.isNotEmpty()) {
                                     IconButton(onClick = {
                                         runCatching { ctx.startActivity(Sharing.chooser(item.savedUris.map(Uri::parse), item.mime)) }
@@ -737,7 +745,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                                 }) { Icon(Icons.Default.Delete, contentDescription = "Remove from list") }
                             }
                             else -> {
-                                if (!item.isConversion) LinkMenu(item.url)
+                                if (!item.isConversion) LinkMenu(item.url) { vm.downloadAgain(item) }
                                 if (item.state == State.FAILED && item.loginHost != null) {
                                     Button(onClick = {
                                         vm.promptLogin(
@@ -761,14 +769,24 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
     }
 }
 
-/** Menú de tres puntos de cada descarga: abrir el enlace original (para volver a la publicación) o copiarlo. */
+/**
+ * Menú de tres puntos de cada descarga: volver a descargarla (eligiendo otra vez el formato), abrir el enlace
+ * original (para volver a la publicación) o copiarlo.
+ */
 @Composable
-private fun LinkMenu(link: String) {
+private fun LinkMenu(link: String, onDownloadAgain: () -> Unit) {
     val ctx = LocalContext.current
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Download again") },
+                onClick = {
+                    open = false
+                    onDownloadAgain()
+                },
+            )
             DropdownMenuItem(
                 text = { Text("Open original link") },
                 onClick = {
