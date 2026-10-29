@@ -103,6 +103,7 @@ import com.quietdlp.app.data.DownloadMode
 import com.quietdlp.app.data.HistoryFilter
 import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.Kind
+import com.quietdlp.app.data.QualityLevel
 import com.quietdlp.app.data.SiteRules
 import com.quietdlp.app.data.Slideshow
 import com.quietdlp.app.data.State
@@ -548,6 +549,20 @@ private fun UrlCard(vm: MainViewModel) {
     }
 }
 
+/** Qué significa cada calidad del modo simple, en una línea. */
+private fun levelHint(kind: Kind, level: QualityLevel): String = when (kind) {
+    Kind.AUDIO -> when (level) {
+        QualityLevel.HIGH -> "M4A, the best quality."
+        QualityLevel.MEDIUM -> "MP3 192k."
+        QualityLevel.LOW -> "MP3 128k, the smallest."
+    }
+    else -> when (level) {
+        QualityLevel.HIGH -> "The best quality the site offers."
+        QualityLevel.MEDIUM -> "720p."
+        QualityLevel.LOW -> "480p, the smallest."
+    }
+}
+
 /** Formatos de audio en grupos, de la mejor calidad a la más pequeña. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -601,12 +616,21 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                     StatusPill("Photos", Tone.ACTIVE)
                 } else {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QuietChip(vm.kind == Kind.VIDEO, { vm.kind = Kind.VIDEO }, "Video", enabled = info.heights.isNotEmpty(),
-                        )
-                        QuietChip(vm.kind == Kind.AUDIO, { vm.kind = Kind.AUDIO }, "Audio only")
+                        QuietChip(vm.kind == Kind.VIDEO, { vm.chooseKind(Kind.VIDEO) }, "Video", enabled = info.heights.isNotEmpty())
+                        QuietChip(vm.kind == Kind.AUDIO, { vm.chooseKind(Kind.AUDIO) }, "Audio")
                     }
-                    // Modo simple: solo vídeo o audio, con la mejor calidad. Los detalles están en el modo avanzado.
-                    if (vm.advanced && vm.kind == Kind.VIDEO) {
+                    if (!vm.advanced) {
+                        // Modo simple: vídeo o audio y una calidad (alta, media o baja). El detalle está en el modo avanzado.
+                        Text("Quality", style = MaterialTheme.typography.labelLarge)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            QualityLevel.entries.forEach { QuietChip(vm.level == it, { vm.chooseLevel(it) }, it.label) }
+                        }
+                        Text(
+                            levelHint(vm.kind, vm.level),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else if (vm.kind == Kind.VIDEO) {
                         Text("Quality", style = MaterialTheme.typography.labelLarge)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             QuietChip(vm.height == 0, { vm.height = 0 }, "Best")
@@ -614,7 +638,7 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                                 QuietChip(vm.height == h, { vm.height = h }, resolutionName(h))
                             }
                         }
-                    } else if (vm.advanced) {
+                    } else {
                         AudioFormatPicker(vm)
                     }
                 }
@@ -662,7 +686,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
     }
     var askVideo by rememberSaveable { mutableStateOf(false) }
     if (askVideo) {
-        MakeVideoDialog(vm.songSeconds, vm.rememberSong, item.clipLengthMs, onDismiss = { askVideo = false }) { seconds, remember ->
+        MakeVideoDialog(vm.songSeconds, vm.rememberSong, onDismiss = { askVideo = false }) { seconds, remember ->
             askVideo = false
             vm.makeVideo(item, seconds, remember)
         }
@@ -814,9 +838,7 @@ private fun LinkMenu(link: String, onDownloadAgain: () -> Unit) {
 /** Ventana de "Make video": hasta cuándo suena la canción. Empieza con la última elección. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MakeVideoDialog(
-    current: Int, rememberChoice: Boolean, clipLengthMs: Long, onDismiss: () -> Unit, onMake: (Int, Boolean) -> Unit,
-) {
+private fun MakeVideoDialog(current: Int, rememberChoice: Boolean, onDismiss: () -> Unit, onMake: (Int, Boolean) -> Unit) {
     var picked by remember { mutableStateOf(current) }
     var remembered by remember { mutableStateOf(rememberChoice) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -828,18 +850,8 @@ private fun MakeVideoDialog(
                 Text("How long should the song play?", style = MaterialTheme.typography.labelMedium, color = muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Slideshow.SONG_LENGTHS.forEach { (seconds, label) ->
-                        // "As posted" muestra cuánto dura el trozo del autor, cuando se sabe.
-                        val shown = if (seconds == Slideshow.AS_POSTED && clipLengthMs > 0) {
-                            "$label (${formatDuration((clipLengthMs / 1000).toInt())})"
-                        } else label
-                        QuietChip(picked == seconds, { picked = seconds }, shown)
+                        QuietChip(picked == seconds, { picked = seconds }, label)
                     }
-                }
-                if (picked == Slideshow.AS_POSTED && clipLengthMs <= 0) {
-                    Text(
-                        "This post doesn't say which part, so the whole song plays.",
-                        style = MaterialTheme.typography.bodySmall, color = muted,
-                    )
                 }
                 Text(
                     "Each photo shows for at least 3 seconds. A cut song fades out.",

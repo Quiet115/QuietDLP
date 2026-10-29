@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.quietdlp.app.data.Kind
+import com.quietdlp.app.data.QualityLevel
 import com.quietdlp.app.data.Prefs
 import com.quietdlp.app.data.Quality
 import android.net.Uri
@@ -522,6 +523,25 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             height = q.maxHeight
             setAudio(q.audioFormat, q.audioBitrate)
         }
+        // El modo simple muestra la calidad (alta, media, baja) que más se parece a lo que quedó elegido.
+        level = QualityLevel.fromQuality(Quality(kind, height, audioFormat, audioBitrate))
+    }
+
+    /** La calidad elegida en el modo simple (alta, media o baja). */
+    var level by mutableStateOf(QualityLevel.HIGH)
+        private set
+
+    /** Modo simple: elegir la calidad fija el tope de vídeo y el formato de audio de golpe. */
+    fun chooseLevel(l: QualityLevel) {
+        level = l
+        height = l.videoHeight
+        setAudio(l.audioFormat, l.audioBitrate)
+    }
+
+    /** Vídeo o audio. En el modo simple se vuelve a aplicar la calidad elegida al nuevo tipo. */
+    fun chooseKind(k: Kind) {
+        kind = k
+        if (!advanced) chooseLevel(level)
     }
 
     private fun setAudio(format: String, bitrate: Int) {

@@ -32,12 +32,13 @@ class HistoryJsonTest {
     }
 
     @Test
-    fun songClipSurvivesAndOldHistoryHasNone() {
-        val clipped = item("c", State.DONE).copy(photoVideo = true, clipStartMs = 30_000, clipLengthMs = 45_000)
-        val back = HistoryJson.decode(HistoryJson.encode(listOf(clipped, item("d", State.DONE))))
-        assertEquals(30_000L, back[0].clipStartMs)
-        assertEquals(45_000L, back[0].clipLengthMs)
-        assertEquals(0L, back[1].clipLengthMs)
+    fun historyFromTheClipExperimentStillLoads() {
+        // La 0.3.3 y la 0.3.4 guardaban estas dos claves; ya no se usan, pero no deben romper nada.
+        val json = """[{"id":"x","url":"https://example.com/a","title":"T","kind":"PHOTO","height":0,"audioFmt":"m4a",""" +
+            """"audioBr":0,"state":"DONE","savedUris":["content://media/1"],"photoVideo":true,"clipStart":30000,"clipLength":88000}]"""
+        val item = HistoryJson.decode(json).single()
+        assertTrue(item.photoVideo)
+        assertEquals("x", item.id)
     }
 
     @Test
