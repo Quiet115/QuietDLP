@@ -43,6 +43,16 @@ class SlideshowTest {
     }
 
     @Test
+    fun songLengthChoicesStartWithTheWholeSong() {
+        val seconds = Slideshow.SONG_LENGTHS.map { it.first }
+        assertEquals(0, seconds.first())
+        assertEquals(seconds.size, seconds.toSet().size)
+        // Después de "entera", de más larga a más corta.
+        assertEquals(seconds.drop(1).sortedDescending(), seconds.drop(1))
+        assertTrue(Slideshow.SONG_LENGTHS.all { it.second.isNotBlank() })
+    }
+
+    @Test
     fun canvasIsEvenAndNeverUpscales() {
         assertEquals(1080 to 1350, Slideshow.canvas(1080, 1350))
         assertEquals(1440 to 1080, Slideshow.canvas(4000, 3000))

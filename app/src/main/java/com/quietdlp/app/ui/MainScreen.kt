@@ -22,7 +22,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -52,6 +54,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -100,6 +103,7 @@ import com.quietdlp.app.data.HistoryFilter
 import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.SiteRules
+import com.quietdlp.app.data.Slideshow
 import com.quietdlp.app.data.State
 import com.quietdlp.app.data.resolutionName
 import com.quietdlp.app.download.DownloadRepository
@@ -650,9 +654,9 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
     }
     var askVideo by rememberSaveable { mutableStateOf(false) }
     if (askVideo) {
-        MakeVideoDialog(vm.songSeconds, onDismiss = { askVideo = false }) { seconds ->
+        MakeVideoDialog(vm.songSeconds, vm.rememberSong, onDismiss = { askVideo = false }) { seconds, remember ->
             askVideo = false
-            vm.makeVideo(item, seconds)
+            vm.makeVideo(item, seconds, remember)
         }
     }
     var askConvert by rememberSaveable { mutableStateOf(false) }
@@ -792,8 +796,9 @@ private fun LinkMenu(link: String) {
 /** Ventana de "Make video": hasta cuándo suena la canción. Empieza con la última elección. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MakeVideoDialog(current: Int, onDismiss: () -> Unit, onMake: (Int) -> Unit) {
+private fun MakeVideoDialog(current: Int, rememberChoice: Boolean, onDismiss: () -> Unit, onMake: (Int, Boolean) -> Unit) {
     var picked by remember { mutableStateOf(current) }
+    var remembered by remember { mutableStateOf(rememberChoice) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -802,7 +807,7 @@ private fun MakeVideoDialog(current: Int, onDismiss: () -> Unit, onMake: (Int) -
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("How long should the song play?", style = MaterialTheme.typography.labelMedium, color = muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(0 to "Whole song", 45 to "45 s", 30 to "30 s", 15 to "15 s").forEach { (seconds, label) ->
+                    Slideshow.SONG_LENGTHS.forEach { (seconds, label) ->
                         QuietChip(picked == seconds, { picked = seconds }, label)
                     }
                 }
@@ -810,9 +815,16 @@ private fun MakeVideoDialog(current: Int, onDismiss: () -> Unit, onMake: (Int) -
                     "Each photo shows for at least 3 seconds. A cut song fades out.",
                     style = MaterialTheme.typography.bodySmall, color = muted,
                 )
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { remembered = !remembered },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = remembered, onCheckedChange = { remembered = it })
+                    Text("Remember my choice", style = MaterialTheme.typography.bodyMedium)
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { onMake(picked) }) { Text("Make video") } },
+        confirmButton = { TextButton(onClick = { onMake(picked, remembered) }) { Text("Make video") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }

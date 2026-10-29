@@ -9,6 +9,9 @@ object Slideshow {
     /** Más fotos que estas no entran en el vídeo (un perfil entero daría un vídeo interminable). */
     const val MAX_IMAGES = 30
 
+    /** Hasta cuándo puede sonar la canción: segundos (0 = entera) y su nombre en pantalla. */
+    val SONG_LENGTHS: List<Pair<Int, String>> = listOf(0 to "Whole song", 45 to "45 s", 30 to "30 s", 15 to "15 s")
+
     private const val MIN_SECONDS = 3.0
     private const val MAX_TOTAL_SECONDS = 90.0
     private const val DEFAULT_SECONDS = 4.0
