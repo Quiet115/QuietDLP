@@ -623,7 +623,15 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun convert(item: DownloadItem, target: ConvertTarget) = DownloadService.convert(app, item, target)
 
     /** Hace un vídeo con las fotos de una publicación y su canción. */
-    fun makeVideo(item: DownloadItem) = DownloadService.makeVideo(app, item)
+    fun makeVideo(item: DownloadItem, songSeconds: Int) {
+        this.songSeconds = songSeconds
+        prefs.songSeconds = songSeconds
+        DownloadService.makeVideo(app, item, songSeconds)
+    }
+
+    /** Hasta cuándo suena la canción en el vídeo (0 = entera): la última elección, que también usa el modo automático. */
+    var songSeconds by mutableIntStateOf(prefs.songSeconds)
+        private set
 
     // ── Búsqueda y selección en el historial ──
     var searchQuery by mutableStateOf("")

@@ -19,11 +19,18 @@ object Slideshow {
      * Segundos por foto: la canción repartida entre las fotos, con un mínimo de 3. Así el vídeo dura lo que la
      * canción (hasta 90 segundos); si las fotos piden más tiempo que la canción, esta se repite.
      */
-    fun secondsPerImage(audioMs: Long, count: Int): Double {
+    fun secondsPerImage(audioMs: Long, count: Int, maxSeconds: Int = 0): Double {
         if (audioMs <= 0 || count <= 0) return DEFAULT_SECONDS
-        val total = min(audioMs / 1000.0, MAX_TOTAL_SECONDS)
+        var total = min(audioMs / 1000.0, MAX_TOTAL_SECONDS)
+        // El usuario puede pedir menos (0 = la canción entera).
+        if (maxSeconds > 0) total = min(total, maxSeconds.toDouble())
         return maxOf(MIN_SECONDS, total / count)
     }
+
+    /** ¿Termina el vídeo antes que la canción? Entonces el final se apaga poco a poco. */
+    fun cutsSong(audioMs: Long, videoMs: Long): Boolean = audioMs > videoMs + 500
+
+    private const val FADE_SECONDS = 2.0
 
     fun totalMs(count: Int, secondsPerImage: Double): Long = (count * secondsPerImage * 1000).toLong()
 
@@ -49,16 +56,21 @@ object Slideshow {
     )
 
     /** Comando de ffmpeg: las fotos en orden (cada una [secondsPerImage] segundos) y el audio, que se repite si hace falta. */
-    fun command(images: List<String>, audio: String, output: String, width: Int, height: Int, secondsPerImage: Double): List<String> {
+    fun command(
+        images: List<String>, audio: String, output: String, width: Int, height: Int, secondsPerImage: Double,
+        fadeOut: Boolean = false,
+    ): List<String> {
         require(images.isNotEmpty()) { "No images" }
         val sec = String.format(Locale.US, "%.3f", secondsPerImage)
+        val fadeStart = String.format(Locale.US, "%.3f", maxOf(0.0, images.size * secondsPerImage - FADE_SECONDS))
+        val fade = if (fadeOut) listOf("-af", "afade=t=out:st=$fadeStart:d=${FADE_SECONDS.toInt()}") else emptyList()
         val fit = "scale=$width:$height:force_original_aspect_ratio=decrease," +
             "pad=$width:$height:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p"
         val filter = images.indices.joinToString(";") { "[$it:v]$fit[v$it]" } + ";" +
             images.indices.joinToString("") { "[v$it]" } + "concat=n=${images.size}:v=1:a=0[v]"
         return listOf("-hide_banner", "-nostdin", "-y") +
             images.flatMap { listOf("-loop", "1", "-framerate", "25", "-t", sec, "-i", it) } +
-            listOf("-stream_loop", "-1", "-i", audio, "-filter_complex", filter, "-map", "[v]", "-map", "${images.size}:a:0") +
+            listOf("-stream_loop", "-1", "-i", audio, "-filter_complex", filter, "-map", "[v]", "-map", "${images.size}:a:0") + fade +
             listOf(
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",

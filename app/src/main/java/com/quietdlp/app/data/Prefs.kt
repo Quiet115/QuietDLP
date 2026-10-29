@@ -32,6 +32,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("auto_photo_video", false)
         set(v) = sp.edit().putBoolean("auto_photo_video", v).apply()
 
+    /** Cuánto suena la canción en el vídeo de fotos con música, en segundos. 0 = entera. */
+    var songSeconds: Int
+        get() = sp.getInt("song_seconds", 0)
+        set(v) = sp.edit().putInt("song_seconds", v).apply()
+
     var audioBitrate: Int
         get() = sp.getInt("audio_bitrate", 0)
         set(v) = sp.edit().putInt("audio_bitrate", v).apply()
