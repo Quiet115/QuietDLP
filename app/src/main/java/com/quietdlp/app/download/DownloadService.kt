@@ -20,6 +20,10 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.quietdlp.app.MainActivity
 import com.quietdlp.app.Sharing
+import com.quietdlp.app.data.AudioOptions
+import com.quietdlp.app.data.CONVERT_URL_PREFIX
+import com.quietdlp.app.data.ConvertTarget
+import com.quietdlp.app.data.ConvertTargets
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.FreeSpace
 import com.quietdlp.app.data.Kind
@@ -37,6 +41,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileNotFoundException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -50,6 +55,10 @@ class DownloadService : Service() {
     companion object {
         private const val ACTION_ENQUEUE = "com.quietdlp.app.ENQUEUE"
         private const val ACTION_CANCEL = "com.quietdlp.app.CANCEL"
+        private const val ACTION_CONVERT = "com.quietdlp.app.CONVERT"
+        private const val EXTRA_SRC_URI = "src_uri"
+        private const val EXTRA_SRC_MIME = "src_mime"
+        private const val EXTRA_TARGET = "target"
         private const val EXTRA_URL = "url"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_THUMB = "thumb"
@@ -83,6 +92,19 @@ class DownloadService : Service() {
             ContextCompat.startForegroundService(ctx, i)
         }
 
+        /** Convierte un archivo ya descargado ([source], con su archivo guardado) al formato [target]. */
+        fun convert(ctx: Context, source: DownloadItem, target: ConvertTarget) {
+            val uri = source.savedUri ?: return
+            val i = Intent(ctx, DownloadService::class.java)
+                .setAction(ACTION_CONVERT)
+                .putExtra(EXTRA_SRC_URI, uri)
+                .putExtra(EXTRA_SRC_MIME, source.mime)
+                .putExtra(EXTRA_TARGET, target.id)
+                .putExtra(EXTRA_TITLE, source.title)
+                .putExtra(EXTRA_THUMB, source.thumbnail)
+            ContextCompat.startForegroundService(ctx, i)
+        }
+
         fun cancel(ctx: Context, id: String) {
             ctx.startService(
                 Intent(ctx, DownloadService::class.java)
@@ -97,6 +119,11 @@ class DownloadService : Service() {
     private val pending = AtomicInteger(0)
     private val cancelled = ConcurrentHashMap.newKeySet<String>()
     private val main = Handler(Looper.getMainLooper())
+
+    /** Lo que hace falta para una conversión en cola (solo vive mientras el servicio está activo). */
+    private class ConvertJob(val sourceUri: String, val target: ConvertTarget, val sourceTitle: String)
+
+    private val convertJobs = ConcurrentHashMap<String, ConvertJob>()
 
     @Volatile
     private var lastStartId = 0
@@ -140,6 +167,7 @@ class DownloadService : Service() {
         lastStartId = startId
         when (intent?.action) {
             ACTION_ENQUEUE -> handleEnqueue(intent)
+            ACTION_CONVERT -> handleConvert(intent)
             ACTION_CANCEL -> intent.getStringExtra(EXTRA_ID)?.let { handleCancel(it) }
         }
         if (pending.get() == 0) stopIfIdle()
@@ -182,6 +210,24 @@ class DownloadService : Service() {
         queue.trySend(item.id)
     }
 
+    private fun handleConvert(intent: Intent) {
+        val uri = intent.getStringExtra(EXTRA_SRC_URI) ?: return
+        val target = ConvertTargets.byId(intent.getStringExtra(EXTRA_TARGET)) ?: return
+        val title = intent.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() } ?: "Converted"
+        val item = DownloadItem(
+            id = UUID.randomUUID().toString(),
+            url = CONVERT_URL_PREFIX + uri,
+            title = ConvertTargets.outputName(title, target).substringBeforeLast('.'),
+            thumbnail = intent.getStringExtra(EXTRA_THUMB),
+            quality = target.quality,
+            mime = intent.getStringExtra(EXTRA_SRC_MIME),
+        )
+        convertJobs[item.id] = ConvertJob(uri, target, title)
+        DownloadRepository.add(item)
+        pending.incrementAndGet()
+        queue.trySend(item.id)
+    }
+
     private fun handleCancel(id: String) {
         cancelled.add(id)
         DownloadRepository.update(id) {
@@ -191,6 +237,7 @@ class DownloadService : Service() {
         scope.launch {
             runCatching { YoutubeDL.destroyProcessById(id) }
             GalleryDl.cancel(id)
+            Ffmpeg.cancel(id)
         }
     }
 
@@ -200,6 +247,11 @@ class DownloadService : Service() {
         val item = DownloadRepository.get(id) ?: return
         if (id in cancelled) {
             cancelled.remove(id)
+            convertJobs.remove(id)
+            return
+        }
+        convertJobs.remove(id)?.let { job ->
+            processConversion(item, job)
             return
         }
         val tmp = File(cacheDir, "dl/$id").apply { mkdirs() }
@@ -249,6 +301,79 @@ class DownloadService : Service() {
         }
     }
 
+
+    // ───────────────────────── conversión ─────────────────────────
+
+    /** Copia el archivo original a la carpeta temporal (ffmpeg no lee direcciones `content://`). Devuelve su tamaño. */
+    private fun copySource(uri: String, dest: File): Long {
+        val input = contentResolver.openInputStream(Uri.parse(uri)) ?: throw FileNotFoundException(uri)
+        return input.use { src -> dest.outputStream().use { src.copyTo(it) } }
+    }
+
+    private fun conversionMessage(t: Throwable): String {
+        val text = (t.message ?: t.toString()).removePrefix("ERROR:").trim()
+        return when (t) {
+            is FileNotFoundException, is SecurityException -> "The original file isn't available anymore."
+            is IllegalStateException -> text.take(220)
+            else -> "Couldn't convert: $text".take(220)
+        }
+    }
+
+    /** Convierte un archivo ya guardado con ffmpeg y guarda el resultado como un archivo nuevo. */
+    private suspend fun processConversion(item: DownloadItem, job: ConvertJob) {
+        val id = item.id
+        val tmp = File(cacheDir, "cv/$id").apply { mkdirs() }
+        try {
+            setState(id, State.PREPARING, "Getting ready…")
+            notifyProgress(item, "Getting ready…", -1, force = true)
+            Engine.ensureReady(applicationContext)
+
+            val input = File(tmp, "input")
+            val size = copySource(job.sourceUri, input)
+            // La salida puede pesar tanto como la entrada o más (FLAC, WAV): sitio para las dos y un margen.
+            val free = StatFs(tmp.absolutePath).availableBytes
+            if (free < size * 2 + 50L * 1024 * 1024) error(FreeSpace.message(free))
+            if (id in cancelled) error("Canceled")
+
+            val out = File(tmp, ConvertTargets.outputName(job.sourceTitle, job.target))
+            Ffmpeg.run(applicationContext, id, job.target.command(input.absolutePath, out.absolutePath)) { pct ->
+                if (id in cancelled) return@run
+                if (pct >= 0) {
+                    DownloadRepository.update(id) {
+                        it.copy(state = State.DOWNLOADING, progress = pct.toFloat(), message = null)
+                    }
+                    notifyProgress(item, "Converting… $pct%", pct)
+                } else {
+                    setState(id, State.PROCESSING, "Converting…")
+                    notifyProgress(item, "Converting…", -1)
+                }
+            }
+            if (!out.exists() || out.length() == 0L) error("ffmpeg finished but produced no file")
+
+            setState(id, State.PROCESSING, "Saving…")
+            val saved = MediaSaver.publish(applicationContext, out)
+            DownloadRepository.update(id) {
+                it.copy(
+                    state = State.DONE, progress = 100f, message = null,
+                    savedUris = listOf(saved.uri.toString()), mime = saved.mime,
+                )
+            }
+            notifyResult(id, item.title, ok = true, saved = saved, shareUris = listOf(saved.uri), what = "Conversion")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            if (id in cancelled) {
+                setState(id, State.CANCELED, "Canceled")
+            } else {
+                val msg = conversionMessage(t)
+                DownloadRepository.update(id) { it.copy(state = State.FAILED, message = msg) }
+                notifyResult(id, item.title, ok = false, error = msg, what = "Conversion")
+            }
+        } finally {
+            cancelled.remove(id)
+            tmp.deleteRecursively()
+        }
+    }
 
     /** Una pasada completa: preparar, descargar y guardar. Lanza si falla. */
     private suspend fun attempt(item: DownloadItem, tmp: File) {
@@ -386,12 +511,9 @@ class DownloadService : Service() {
             r.addOption("-S", "$res,vcodec:h264,acodec:m4a")
             r.addOption("--merge-output-format", "mp4")
         } else {
-            // Con M4A, preferir un audio que ya sea m4a para no recodificar (y perder calidad).
-            r.addOption("-f", if (q.audioFormat == "m4a") "ba[ext=m4a]/ba/b" else "ba/b")
-            r.addOption("-x")
-            r.addOption("--audio-format", q.audioFormat)
-            r.addOption("--audio-quality", if (q.audioBitrate > 0) "${q.audioBitrate}K" else "0")
-            r.addOption("--embed-metadata")
+            AudioOptions.ytDlpOptions(q.audioFormat, q.audioBitrate).forEach { (name, value) ->
+                if (value == null) r.addOption(name) else r.addOption(name, value)
+            }
         }
         return r
     }
@@ -485,6 +607,7 @@ class DownloadService : Service() {
         item: DownloadItem? = null,
         loginHost: String? = null,
         shareUris: List<Uri> = emptyList(),
+        what: String = "Download",
     ) {
         val contentIntent = if (!ok && item != null && loginHost != null) {
             // Al tocar el aviso se abre la app directamente con la explicación de inicio de sesión.
@@ -515,7 +638,7 @@ class DownloadService : Service() {
             .setSmallIcon(
                 if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error,
             )
-            .setContentTitle(if (ok) "Download complete" else "Download failed")
+            .setContentTitle(if (ok) "$what complete" else "$what failed")
             .setContentText(if (ok) title else (error ?: title))
             .setStyle(NotificationCompat.BigTextStyle().bigText(if (ok) title else (error ?: title)))
             .setContentIntent(contentIntent)

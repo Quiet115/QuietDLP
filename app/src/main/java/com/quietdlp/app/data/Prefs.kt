@@ -1,6 +1,7 @@
 package com.quietdlp.app.data
 
 import android.content.Context
+import com.quietdlp.app.ui.Palettes
 
 /** Ajustes sencillos guardados en SharedPreferences. */
 class Prefs(context: Context) {
@@ -25,6 +26,10 @@ class Prefs(context: Context) {
     var audioFormat: String
         get() = sp.getString("audio_format", "m4a") ?: "m4a"
         set(v) = sp.edit().putString("audio_format", v).apply()
+
+    var audioBitrate: Int
+        get() = sp.getInt("audio_bitrate", 0)
+        set(v) = sp.edit().putInt("audio_bitrate", v).apply()
 
     /** Avisar de versiones nuevas de la propia app. Activado por defecto. */
     var appUpdateCheck: Boolean
@@ -86,6 +91,10 @@ class Prefs(context: Context) {
         get() = sp.getString("last_audio_format", "m4a") ?: "m4a"
         set(v) = sp.edit().putString("last_audio_format", v).apply()
 
+    var lastAudioBitrate: Int
+        get() = sp.getInt("last_audio_bitrate", 0)
+        set(v) = sp.edit().putInt("last_audio_bitrate", v).apply()
+
     /** Ofrecer descargar el enlace que el usuario tiene copiado al abrir la app. Activado por defecto. */
     var clipboardOffer: Boolean
         get() = sp.getBoolean("clipboard_offer", true)
@@ -101,9 +110,9 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_clip_ms", 0L)
         set(v) = sp.edit().putLong("last_clip_ms", v).apply()
 
-    /** Paleta de colores elegida ("obsidian" por defecto; "system" = colores del sistema). */
+    /** Paleta de colores elegida ("obsidian" por defecto; "wallpaper" = colores del sistema, antes "system"). */
     var paletteId: String
-        get() = sp.getString("palette", "obsidian") ?: "obsidian"
+        get() = Palettes.normalizeId(sp.getString("palette", "obsidian"))
         set(v) = sp.edit().putString("palette", v).apply()
 
     /** Paletas creadas por el usuario, en JSON (ver Palettes.encodeCustom). */
@@ -125,6 +134,11 @@ class Prefs(context: Context) {
     var folderUri: String
         get() = sp.getString("folder_uri", "") ?: ""
         set(v) = sp.edit().putString("folder_uri", v).apply()
+
+    /** Orientación de la pantalla: "auto" (sigue al teléfono), "portrait" o "landscape". */
+    var orientation: AppOrientation
+        get() = AppOrientation.fromKey(sp.getString("orientation", null))
+        set(v) = sp.edit().putString("orientation", v.key).apply()
 
     /** Mostrar la tarjeta de apoyo en la pantalla principal. Activada por defecto. */
     var supportCard: Boolean

@@ -36,6 +36,24 @@ class DownloadModeTest {
     }
 
     @Test
+    fun everyAudioOptionHasExactlyOneModeInTheSameOrder() {
+        val fromModes = DownloadMode.entries.mapNotNull { it.audio }
+        assertEquals(AudioOptions.all, fromModes)
+        DownloadMode.entries.filter { it.audio != null }.forEach {
+            assertEquals(it.audio!!.format, it.quality!!.audioFormat)
+            assertEquals(it.audio!!.bitrate, it.quality!!.audioBitrate)
+        }
+    }
+
+    @Test
+    fun oldSavedKeysStillWork() {
+        assertEquals("m4a", DownloadMode.fromKey("music_best")!!.quality!!.audioFormat)
+        assertEquals(128, DownloadMode.fromKey("music_mp3")!!.quality!!.audioBitrate)
+        assertNull(DownloadMode.BEST_VIDEO.audio)
+        assertNull(DownloadMode.ASK.audio)
+    }
+
+    @Test
     fun qualitiesAreWhatTheLabelsSay() {
         assertEquals(Quality(Kind.VIDEO, 0), DownloadMode.BEST_VIDEO.quality)
         assertEquals(1080, DownloadMode.VIDEO_1080.quality!!.maxHeight)

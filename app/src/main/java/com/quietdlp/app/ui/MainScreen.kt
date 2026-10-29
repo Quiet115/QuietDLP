@@ -16,6 +16,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -23,13 +24,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -61,6 +65,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,9 +87,13 @@ import com.quietdlp.app.LoginPrompt
 import com.quietdlp.app.MainViewModel
 import com.quietdlp.app.MediaInfo
 import com.quietdlp.app.Sharing
+import com.quietdlp.app.data.AudioOptions
+import com.quietdlp.app.data.ConvertTarget
+import com.quietdlp.app.data.ConvertTargets
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.DownloadMode
 import com.quietdlp.app.data.HistoryFilter
+import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.SiteRules
 import com.quietdlp.app.data.State
@@ -98,7 +107,7 @@ import com.quietdlp.app.update.AppUpdater
 fun MainScreen(vm: MainViewModel) {
     val ctx = LocalContext.current
     val downloads by DownloadRepository.items.collectAsStateWithLifecycle()
-    var showSettings by remember { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val visible = HistoryFilter.filter(downloads, vm.searchQuery)
     val selecting = vm.selected.isNotEmpty()
     BackHandler(enabled = selecting && !showSettings) { vm.clearSelection() }
@@ -122,58 +131,34 @@ fun MainScreen(vm: MainViewModel) {
         Scaffold(
             topBar = { MainTopBar(vm) { showSettings = true } },
         ) { pad ->
-            LazyColumn(
-                modifier = Modifier
-                    .padding(pad)
-                    .fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                item { EngineBanner(vm) }
-                vm.clipOffer?.let { link -> item { ClipCard(vm, link) } }
-                item { UrlCard(vm) }
-                vm.info?.let { item { InfoCard(vm, it) } }
-                vm.error?.let {
-                    item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-                }
-                if (vm.supportCard && Links.DONATE_URL.isNotBlank()) item { SupportCard() }
-                item {
-                    if (selecting) {
-                        SelectionBar(vm, visible)
-                    } else {
-                        Row(
-                            Modifier.fillMaxWidth().padding(top = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
+            BoxWithConstraints(Modifier.padding(pad).fillMaxSize()) {
+                if (Layouts.twoColumns(maxWidth.value.toInt())) {
+                    // Pantalla ancha (horizontal, tableta, plegable): a la izquierda el enlace, a la derecha las descargas.
+                    Row(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            Modifier.weight(0.42f).fillMaxHeight(),
+                            contentPadding = PaddingValues(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 32.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) { inputSection(vm) }
+                        LazyColumn(
+                            Modifier.weight(0.58f).fillMaxHeight(),
+                            contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                        ) { historySection(vm, downloads, visible, selecting) }
+                    }
+                } else {
+                    // Una columna, centrada y con un ancho máximo para que no se estire.
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+                        LazyColumn(
+                            Modifier.widthIn(max = Layouts.MAX_SINGLE_COLUMN_DP.dp).fillMaxWidth().fillMaxHeight(),
+                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Downloads", style = MaterialTheme.typography.titleMedium)
-                                if (downloads.isNotEmpty()) StatusPill("${downloads.size}", Tone.NEUTRAL)
-                            }
-                            if (downloads.any { !it.isActive }) {
-                                TextButton(onClick = vm::clearFinished) { Text("Clear list") }
-                            }
+                            inputSection(vm)
+                            historySection(vm, downloads, visible, selecting)
                         }
                     }
                 }
-                if (downloads.size >= 5 || vm.searchQuery.isNotEmpty()) item {
-                    OutlinedTextField(
-                        value = vm.searchQuery,
-                        onValueChange = { vm.searchQuery = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Search history") },
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        trailingIcon = {
-                            if (vm.searchQuery.isNotEmpty()) TextButton(onClick = { vm.searchQuery = "" }) { Text("Clear") }
-                        },
-                    )
-                }
-                if (downloads.isEmpty()) item { EmptyState() }
-                else if (visible.isEmpty()) item {
-                    Text("No matches.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                items(visible, key = { it.id }) { DownloadRow(it, vm, selecting, it.id in vm.selected) }
             }
         }
 
@@ -188,6 +173,64 @@ fun MainScreen(vm: MainViewModel) {
     vm.loginPrompt?.let { LoginPromptDialog(vm, it) }
     vm.duplicatePrompt?.let { DuplicateDialog(vm) }
     if (vm.showAppUpdate) vm.appUpdate?.let { AppUpdateDialog(vm, it) }
+}
+
+/** Parte de arriba: estado del motor, enlace copiado, cuadro del enlace, análisis y tarjeta de apoyo. */
+private fun LazyListScope.inputSection(vm: MainViewModel) {
+    item { EngineBanner(vm) }
+    vm.clipOffer?.let { link -> item { ClipCard(vm, link) } }
+    item { UrlCard(vm) }
+    vm.info?.let { item { InfoCard(vm, it) } }
+    vm.error?.let {
+        item { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    }
+    if (vm.supportCard && Links.DONATE_URL.isNotBlank()) item { SupportCard() }
+}
+
+/** Parte de abajo: título (o barra de selección), búsqueda y lista de descargas. */
+private fun LazyListScope.historySection(
+    vm: MainViewModel,
+    downloads: List<DownloadItem>,
+    visible: List<DownloadItem>,
+    selecting: Boolean,
+) {
+    item {
+        if (selecting) {
+            SelectionBar(vm, visible)
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Downloads", style = MaterialTheme.typography.titleMedium)
+                    if (downloads.isNotEmpty()) StatusPill("${downloads.size}", Tone.NEUTRAL)
+                }
+                if (downloads.any { !it.isActive }) {
+                    TextButton(onClick = vm::clearFinished) { Text("Clear list") }
+                }
+            }
+        }
+    }
+    if (downloads.size >= 5 || vm.searchQuery.isNotEmpty()) item {
+        OutlinedTextField(
+            value = vm.searchQuery,
+            onValueChange = { vm.searchQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Search history") },
+            singleLine = true,
+            shape = MaterialTheme.shapes.medium,
+            trailingIcon = {
+                if (vm.searchQuery.isNotEmpty()) TextButton(onClick = { vm.searchQuery = "" }) { Text("Clear") }
+            },
+        )
+    }
+    if (downloads.isEmpty()) item { EmptyState() }
+    else if (visible.isEmpty()) item {
+        Text("No matches.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    items(visible, key = { it.id }) { DownloadRow(it, vm, selecting, it.id in vm.selected) }
 }
 
 @Composable
@@ -249,13 +292,13 @@ private fun SupportCard() {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Button(onClick = {
-                runCatching {
-                    ctx.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse(Links.DONATE_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                }
-            }) { Text("♥ Tip") }
+            fun open(url: String) = runCatching {
+                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(onClick = { open(Links.DONATE_URL) }) { Text("Ko-fi") }
+                if (Links.PAYPAL_URL.isNotBlank()) OutlinedButton(onClick = { open(Links.PAYPAL_URL) }) { Text("PayPal") }
+            }
         }
     }
 }
@@ -265,7 +308,7 @@ private fun SupportCard() {
 private fun SelectionBar(vm: MainViewModel, visible: List<DownloadItem>) {
     val ctx = LocalContext.current
     val chosen = visible.filter { it.id in vm.selected }
-    var askDelete by remember { mutableStateOf(false) }
+    var askDelete by rememberSaveable { mutableStateOf(false) }
     if (askDelete) {
         AlertDialog(
             onDismissRequest = { askDelete = false },
@@ -489,6 +532,26 @@ private fun UrlCard(vm: MainViewModel) {
     }
 }
 
+/** Formatos de audio en grupos, de la mejor calidad a la más pequeña. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AudioFormatPicker(vm: MainViewModel) {
+    Text("Format", style = MaterialTheme.typography.labelLarge)
+    AudioOptions.byTier().forEach { (tier, options) ->
+        Text(tier.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            options.forEach { o ->
+                QuietChip(vm.audioFormat == o.format && vm.audioBitrate == o.bitrate, { vm.chooseAudio(o) }, o.label)
+            }
+        }
+    }
+    Text(
+        AudioOptions.find(vm.audioFormat, vm.audioBitrate).hint,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
@@ -536,12 +599,7 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                             }
                         }
                     } else if (vm.advanced) {
-                        Text("Format", style = MaterialTheme.typography.labelLarge)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("m4a" to "M4A (best quality)", "mp3" to "MP3 (most compatible)").forEach { (f, label) ->
-                                QuietChip(vm.audioFormat == f, { vm.chooseAudioFormat(f) }, label)
-                            }
-                        }
+                        AudioFormatPicker(vm)
                     }
                 }
 
@@ -569,7 +627,7 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
 @Composable
 private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolean, isSelected: Boolean) {
     val ctx = LocalContext.current
-    var askDelete by remember { mutableStateOf(false) }
+    var askDelete by rememberSaveable { mutableStateOf(false) }
     if (askDelete) {
         AlertDialog(
             onDismissRequest = { askDelete = false },
@@ -585,6 +643,13 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                 }
             },
         )
+    }
+    var askConvert by rememberSaveable { mutableStateOf(false) }
+    if (askConvert) {
+        ConvertDialog(item, onDismiss = { askConvert = false }) { target ->
+            askConvert = false
+            vm.convert(item, target)
+        }
     }
 
     Card(
@@ -644,6 +709,9 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                                     IconButton(onClick = { openFile(ctx, item) }) {
                                         Icon(Icons.Default.PlayArrow, contentDescription = "Open")
                                     }
+                                    if (ConvertTargets.canConvert(item.mime)) {
+                                        TextButton(onClick = { askConvert = true }) { Text("Convert") }
+                                    }
                                 }
                                 IconButton(onClick = {
                                     if (item.savedUris.isNotEmpty()) askDelete = true else vm.remove(item.id)
@@ -660,7 +728,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                                         )
                                     }) { Text("Sign in") }
                                 }
-                                OutlinedButton(onClick = { vm.retry(item) }) { Text("Retry") }
+                                if (!item.isConversion) OutlinedButton(onClick = { vm.retry(item) }) { Text("Retry") }
                                 IconButton(onClick = { vm.remove(item.id) }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Remove from list")
                                 }
@@ -671,6 +739,39 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
             }
         }
     }
+}
+
+/** Ventana para elegir a qué formato convertir un archivo ya descargado. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ConvertDialog(item: DownloadItem, onDismiss: () -> Unit, onConvert: (ConvertTarget) -> Unit) {
+    var picked by remember { mutableStateOf<ConvertTarget?>(null) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Convert to") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(item.title, style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                ConvertTargets.sectionsFor(item.mime).forEach { section ->
+                    Text(section.title, style = MaterialTheme.typography.labelMedium, color = muted)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        section.targets.forEach { t -> QuietChip(picked == t, { picked = t }, t.label) }
+                    }
+                }
+                picked?.let { t ->
+                    Text(t.hint, style = MaterialTheme.typography.bodySmall, color = muted)
+                    ConvertTargets.warning(t, item.mime)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { picked?.let(onConvert) }, enabled = picked != null) { Text("Convert") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 private fun statusLabel(item: DownloadItem): String = when (item.state) {

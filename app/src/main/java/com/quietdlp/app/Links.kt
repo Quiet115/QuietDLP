@@ -11,6 +11,8 @@ package com.quietdlp.app
  */
 object Links {
     const val DONATE_URL = "https://ko-fi.com/quiet115"
+    /** Enlace de PayPal.me (opcional). Mientras esté vacío, el botón de PayPal no se muestra. */
+    const val PAYPAL_URL = ""
     const val GITHUB_REPO = "Quiet115/QuietDLP"
     const val SOURCE_URL = "https://github.com/Quiet115/QuietDLP"
 }

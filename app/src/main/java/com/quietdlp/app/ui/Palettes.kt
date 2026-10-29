@@ -29,8 +29,18 @@ data class PaletteSpec(
 )
 
 object Palettes {
-    /** Id especial: usa los colores del sistema (Android 12 o superior). */
-    const val SYSTEM = "system"
+    /** Id especial: usa los colores del fondo de pantalla del sistema (Android 12 o superior). */
+    const val SYSTEM = "wallpaper"
+
+    /** Id que usaban las versiones anteriores para la misma paleta; se lee como [SYSTEM]. */
+    private const val LEGACY_SYSTEM = "system"
+
+    /** Id guardado en las preferencias, con el nombre antiguo de la paleta del sistema ya traducido. */
+    fun normalizeId(id: String?): String = when (id) {
+        null -> DEFAULT
+        LEGACY_SYSTEM -> SYSTEM
+        else -> id
+    }
     const val DEFAULT = "obsidian"
     const val MAX_CUSTOM = 12
 
@@ -109,10 +119,19 @@ object Palettes {
         val surface = if (dark) hsv(bh, t * 0.30f, 0.11f + 0.06f * t) else hsv(bh, t * 0.05f, 1.0f)
         fun readable(hue: Float, s: Float, vStart: Float): Int {
             var v = vStart
-            var c = hsv(hue, s, v)
-            while (!dark && v > 0.2f && (contrastOf(c, bg) < 3.6f || contrastOf(c, 0xFFFFFFFF.toInt()) < 4.7f)) {
+            var sat = s
+            var c = hsv(hue, sat, v)
+            if (dark) {
+                // Los tonos azules y violetas son oscuros aun con brillo máximo: se aclaran quitando saturación.
+                while (sat > 0.05f && contrastOf(c, bg) < 4.5f) {
+                    sat -= 0.03f
+                    c = hsv(hue, sat, v)
+                }
+                return c
+            }
+            while (v > 0.2f && (contrastOf(c, bg) < 4.5f || contrastOf(c, 0xFFFFFFFF.toInt()) < 4.7f)) {
                 v -= 0.03f
-                c = hsv(hue, s, v)
+                c = hsv(hue, sat, v)
             }
             return c
         }

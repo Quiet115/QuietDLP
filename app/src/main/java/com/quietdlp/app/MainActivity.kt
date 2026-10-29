@@ -1,11 +1,14 @@
 package com.quietdlp.app
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
+import com.quietdlp.app.data.AppOrientation
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.Quality
 import com.quietdlp.app.download.DownloadRepository
@@ -34,7 +37,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         DownloadRepository.init(this)
-        setContent { QuietTheme(vm.paletteId, vm.customPalettes) { MainScreen(vm) } }
+        setContent {
+            QuietTheme(vm.paletteId, vm.customPalettes) {
+                LaunchedEffect(vm.orientation) {
+                    requestedOrientation = when (vm.orientation) {
+                        AppOrientation.AUTO -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        AppOrientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                        AppOrientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    }
+                }
+                MainScreen(vm)
+            }
+        }
         if (savedInstanceState == null) handleIntent(intent)
     }
 

@@ -20,11 +20,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,6 +53,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,8 +64,12 @@ import androidx.compose.ui.unit.dp
 import com.quietdlp.app.Links
 import com.quietdlp.app.LoginActivity
 import com.quietdlp.app.MainViewModel
+import com.quietdlp.app.data.AppOrientation
+import com.quietdlp.app.data.AudioTier
 import com.quietdlp.app.data.DownloadMode
+import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.ErrorLogText
+import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.Quality
 import com.quietdlp.app.data.SiteRule
 import com.quietdlp.app.data.SiteRules
@@ -94,10 +101,12 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             )
         },
     ) { pad ->
+        Box(Modifier.padding(pad).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier
-                .padding(pad)
-                .fillMaxSize()
+                .widthIn(max = Layouts.MAX_SINGLE_COLUMN_DP.dp)
+                .fillMaxWidth()
+                .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -107,11 +116,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Default download", style = MaterialTheme.typography.titleSmall)
                     Hint("For Share and copied links.")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DownloadMode.entries.forEach { m ->
-                            QuietChip(vm.mode == m, { vm.changeMode(m) }, m.label)
-                        }
-                    }
+                    ModePicker(vm.mode, includeAsk = true) { vm.changeMode(it) }
                 }
                 SwitchRow(
                     "Remember last choice",
@@ -244,12 +249,13 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("♥ Buy me a buñuelo") }
+                    ) { Text("Buy me a buñuelo") }
                     SwitchRow("Show the support card", "On the main screen, below the link box.", vm.supportCard, vm::changeSupportCard)
                 }
                 Hint("Free software (GPL-3.0). Download only content you have the right to save.")
             }
             Box(Modifier.height(24.dp))
+        }
         }
     }
 }
@@ -258,7 +264,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
 @Composable
 private fun SitesSection(vm: MainViewModel) {
     var editing by remember { mutableStateOf<SiteRule?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    var adding by rememberSaveable { mutableStateOf(false) }
     SectionCard("Sites") {
         Hint("Pick a website and always download the same thing from it, whatever the default is. Example: audio from a music site.")
         vm.siteRules.forEach { rule ->
@@ -311,9 +317,7 @@ private fun SiteRuleEditor(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text("Always download", style = MaterialTheme.typography.labelMedium)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    modes.forEach { m -> QuietChip(picked == m, { picked = m }, m.label) }
-                }
+                ModePicker(picked, includeAsk = false) { picked = it }
             }
         },
         confirmButton = {
@@ -326,6 +330,33 @@ private fun SiteRuleEditor(
             }
         },
     )
+}
+
+/** Los modos de descarga en grupos: vídeo, luego el audio de mejor a menor calidad y, si se pide, "preguntar". */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ModePicker(selected: DownloadMode?, includeAsk: Boolean, onPick: (DownloadMode) -> Unit) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Video", style = MaterialTheme.typography.labelMedium, color = muted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DownloadMode.entries.filter { it.quality?.kind == Kind.VIDEO }.forEach { m ->
+                QuietChip(selected == m, { onPick(m) }, m.label.substringAfter(" · ").replaceFirstChar { it.uppercase() })
+            }
+        }
+        AudioTier.entries.forEach { tier ->
+            val modes = DownloadMode.entries.filter { it.audio?.tier == tier }
+            if (modes.isNotEmpty()) {
+                Text("Audio · ${tier.label}", style = MaterialTheme.typography.labelMedium, color = muted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    modes.forEach { m -> QuietChip(selected == m, { onPick(m) }, m.audio!!.label) }
+                }
+            }
+        }
+        if (includeAsk) {
+            FlowRow { QuietChip(selected == DownloadMode.ASK, { onPick(DownloadMode.ASK) }, DownloadMode.ASK.label) }
+        }
+    }
 }
 
 @Composable
@@ -357,8 +388,13 @@ private fun folderLabel(uri: String): String = runCatching {
 @Composable
 private fun AppearanceSection(vm: MainViewModel) {
     var editing by remember { mutableStateOf<PaletteSpec?>(null) }
-    var creating by remember { mutableStateOf(false) }
+    var creating by rememberSaveable { mutableStateOf(false) }
     SectionCard("Appearance") {
+        Text("Screen orientation", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AppOrientation.entries.forEach { o -> QuietChip(vm.orientation == o, { vm.changeOrientation(o) }, o.label) }
+        }
+        Hint("Auto follows your phone's rotation lock.")
         val groups = listOf(PaletteGroup.DARK, PaletteGroup.COLORFUL, PaletteGroup.LIGHT)
         groups.forEach { g ->
             Text(g.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
