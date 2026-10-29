@@ -63,6 +63,7 @@ class DownloadService : Service() {
         private const val EXTRA_SRC_URI = "src_uri"
         private const val EXTRA_SRC_MIME = "src_mime"
         private const val EXTRA_TARGET = "target"
+        private const val EXTRA_SONG_SECONDS = "song_seconds"
         private const val EXTRA_URL = "url"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_THUMB = "thumb"
@@ -110,10 +111,11 @@ class DownloadService : Service() {
         }
 
         /** Hace un vídeo con las fotos y la canción de una publicación ya descargada. */
-        fun makeVideo(ctx: Context, source: DownloadItem) {
+        fun makeVideo(ctx: Context, source: DownloadItem, songSeconds: Int) {
             ContextCompat.startForegroundService(
                 ctx,
-                Intent(ctx, DownloadService::class.java).setAction(ACTION_MAKE_VIDEO).putExtra(EXTRA_ID, source.id),
+                Intent(ctx, DownloadService::class.java).setAction(ACTION_MAKE_VIDEO)
+                    .putExtra(EXTRA_ID, source.id).putExtra(EXTRA_SONG_SECONDS, songSeconds),
             )
         }
 
@@ -138,7 +140,7 @@ class DownloadService : Service() {
     private val convertJobs = ConcurrentHashMap<String, ConvertJob>()
 
     /** Lo mismo para un vídeo hecho con las fotos de una publicación y su canción. */
-    private class SlideshowJob(val imageUris: List<String>, val audioUri: String, val sourceTitle: String)
+    private class SlideshowJob(val imageUris: List<String>, val audioUri: String, val sourceTitle: String, val maxSeconds: Int)
 
     private val slideshowJobs = ConcurrentHashMap<String, SlideshowJob>()
 
@@ -248,11 +250,14 @@ class DownloadService : Service() {
 
     private fun handleMakeVideo(intent: Intent) {
         val source = intent.getStringExtra(EXTRA_ID)?.let { DownloadRepository.get(it) } ?: return
-        enqueueSlideshow(source)
+        enqueueSlideshow(source, intent.getIntExtra(EXTRA_SONG_SECONDS, prefs.songSeconds))
     }
 
-    /** Pone en cola un vídeo con las fotos y la canción de [source]. No hace nada si le falta una de las dos. */
-    private fun enqueueSlideshow(source: DownloadItem) {
+    /**
+     * Pone en cola un vídeo con las fotos y la canción de [source], con la canción hasta [maxSeconds] (0 = entera).
+     * No hace nada si le falta una de las dos.
+     */
+    private fun enqueueSlideshow(source: DownloadItem, maxSeconds: Int = prefs.songSeconds) {
         val images = source.savedUris.filter { mimeOfUri(it)?.startsWith("image/") == true }.take(Slideshow.MAX_IMAGES)
         val audio = source.savedUris.firstOrNull { mimeOfUri(it)?.startsWith("audio/") == true }
         if (images.isEmpty() || audio == null) return
@@ -263,7 +268,7 @@ class DownloadService : Service() {
             thumbnail = source.thumbnail,
             quality = Quality(Kind.VIDEO),
         )
-        slideshowJobs[item.id] = SlideshowJob(images, audio, source.title)
+        slideshowJobs[item.id] = SlideshowJob(images, audio, source.title, maxSeconds)
         DownloadRepository.add(item)
         pending.incrementAndGet()
         queue.trySend(item.id)
@@ -389,11 +394,16 @@ class DownloadService : Service() {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(images.first().absolutePath, bounds)
         val (w, h) = Slideshow.canvas(bounds.outWidth, bounds.outHeight)
-        val seconds = Slideshow.secondsPerImage(MediaKinds.durationMs(audio), images.size)
+        val audioMs = MediaKinds.durationMs(audio)
+        val seconds = Slideshow.secondsPerImage(audioMs, images.size, job.maxSeconds)
+        val totalMs = Slideshow.totalMs(images.size, seconds)
         val out = File(tmp, Slideshow.outputName(job.sourceTitle))
         Plan(
-            Slideshow.command(images.map { it.absolutePath }, audio.absolutePath, out.absolutePath, w, h, seconds),
-            out, Slideshow.totalMs(images.size, seconds),
+            Slideshow.command(
+                images.map { it.absolutePath }, audio.absolutePath, out.absolutePath, w, h, seconds,
+                fadeOut = Slideshow.cutsSong(audioMs, totalMs),
+            ),
+            out, totalMs,
         )
     }
 

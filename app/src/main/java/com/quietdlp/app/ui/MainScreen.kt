@@ -648,6 +648,13 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
             },
         )
     }
+    var askVideo by rememberSaveable { mutableStateOf(false) }
+    if (askVideo) {
+        MakeVideoDialog(vm.songSeconds, onDismiss = { askVideo = false }) { seconds ->
+            askVideo = false
+            vm.makeVideo(item, seconds)
+        }
+    }
     var askConvert by rememberSaveable { mutableStateOf(false) }
     if (askConvert) {
         ConvertDialog(item, onDismiss = { askConvert = false }) { target ->
@@ -718,7 +725,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                                         TextButton(onClick = { askConvert = true }) { Text("Convert") }
                                     }
                                     if (item.photoVideo) {
-                                        TextButton(onClick = { vm.makeVideo(item) }) { Text("Make video") }
+                                        TextButton(onClick = { askVideo = true }) { Text("Make video") }
                                     }
                                 }
                                 IconButton(onClick = {
@@ -780,6 +787,34 @@ private fun LinkMenu(link: String) {
             )
         }
     }
+}
+
+/** Ventana de "Make video": hasta cuándo suena la canción. Empieza con la última elección. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MakeVideoDialog(current: Int, onDismiss: () -> Unit, onMake: (Int) -> Unit) {
+    var picked by remember { mutableStateOf(current) }
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Make video") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("How long should the song play?", style = MaterialTheme.typography.labelMedium, color = muted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "Whole song", 45 to "45 s", 30 to "30 s", 15 to "15 s").forEach { (seconds, label) ->
+                        QuietChip(picked == seconds, { picked = seconds }, label)
+                    }
+                }
+                Text(
+                    "Each photo shows for at least 3 seconds. A cut song fades out.",
+                    style = MaterialTheme.typography.bodySmall, color = muted,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onMake(picked) }) { Text("Make video") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** Ventana para elegir a qué formato convertir un archivo ya descargado. */

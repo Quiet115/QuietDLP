@@ -21,6 +21,28 @@ class SlideshowTest {
     }
 
     @Test
+    fun theUserCanLimitHowLongTheSongPlays() {
+        // Canción de 88,9 s con una foto: entera, o cortada a lo que se pida.
+        assertEquals(88.9, Slideshow.secondsPerImage(88_900, 1, 0), 0.001)
+        assertEquals(45.0, Slideshow.secondsPerImage(88_900, 1, 45), 0.001)
+        assertEquals(15.0, Slideshow.secondsPerImage(88_900, 1, 15), 0.001)
+        // Pedir más de lo que dura no la alarga.
+        assertEquals(10.0, Slideshow.secondsPerImage(10_000, 1, 45), 0.001)
+        // Con muchas fotos manda el mínimo de 3 s por foto.
+        assertEquals(3.0, Slideshow.secondsPerImage(88_900, 10, 15), 0.001)
+    }
+
+    @Test
+    fun aCutSongFadesOutAndAShortOneDoesNot() {
+        assertTrue(Slideshow.cutsSong(88_900, 45_000))
+        assertTrue(!Slideshow.cutsSong(88_900, 88_900))
+        assertTrue(!Slideshow.cutsSong(2_000, 6_000))
+        val cut = Slideshow.command(listOf("a.jpg"), "s.m4a", "o.mp4", 640, 800, 45.0, fadeOut = true)
+        assertEquals("afade=t=out:st=43.000:d=2", cut[cut.indexOf("-af") + 1])
+        assertTrue("-af" !in Slideshow.command(listOf("a.jpg"), "s.m4a", "o.mp4", 640, 800, 45.0))
+    }
+
+    @Test
     fun canvasIsEvenAndNeverUpscales() {
         assertEquals(1080 to 1350, Slideshow.canvas(1080, 1350))
         assertEquals(1440 to 1080, Slideshow.canvas(4000, 3000))
