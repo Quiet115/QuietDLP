@@ -25,9 +25,7 @@ object HistoryJson {
                     .put("savedUris", JSONArray(i.savedUris))
                     .put("mime", i.mime)
                     .put("loginHost", i.loginHost)
-                    .put("photoVideo", i.photoVideo)
-                    .put("clipStart", i.clipStartMs)
-                    .put("clipLength", i.clipLengthMs),
+                    .put("photoVideo", i.photoVideo),
             )
         }
         return arr.toString()
@@ -59,8 +57,6 @@ object HistoryJson {
                     mime = o.optStringOrNull("mime"),
                     loginHost = o.optStringOrNull("loginHost"),
                     photoVideo = o.optBoolean("photoVideo", false),
-                    clipStartMs = o.optLong("clipStart", 0L),
-                    clipLengthMs = o.optLong("clipLength", 0L),
                 )
             }.getOrNull()
         }

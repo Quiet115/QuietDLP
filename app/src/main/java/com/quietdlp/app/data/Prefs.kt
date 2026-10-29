@@ -37,12 +37,9 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("remember_song", false)
         set(v) = sp.edit().putBoolean("remember_song", v).apply()
 
-    /**
-     * Cuánto suena la canción en el vídeo de fotos con música, en segundos. 0 = entera; -1 = el trozo que eligió
-     * el autor en la publicación (si no se pudo leer, suena entera). Por defecto, como se publicó.
-     */
+    /** Cuánto suena la canción en el vídeo de fotos con música, en segundos. 0 = entera (por defecto). */
     var songSeconds: Int
-        get() = sp.getInt("song_seconds", Slideshow.AS_POSTED)
+        get() = sp.getInt("song_seconds", 0).coerceAtLeast(0)
         set(v) = sp.edit().putInt("song_seconds", v).apply()
 
     var audioBitrate: Int
