@@ -56,6 +56,8 @@ data class DownloadItem(
     val mime: String? = null,
     /** Dominio donde hay que iniciar sesión, si la descarga falló por eso (p. ej. "ejemplo.com"). */
     val loginHost: String? = null,
+    /** Una publicación de fotos que trajo su canción: se puede hacer un vídeo con las dos cosas. */
+    val photoVideo: Boolean = false,
 ) {
     val savedUri: String? get() = savedUris.firstOrNull()
 

@@ -129,6 +129,11 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     if (vm.photosEnabled) "If there's no video, it downloads the photos." else "Off.",
                     vm.photosEnabled, vm::changePhotosEnabled,
                 )
+                SwitchRow(
+                    "Video from photos and music",
+                    if (vm.autoPhotoVideo) "Makes the video by itself when a post has a song." else "Off. Use Make video on the download.",
+                    vm.autoPhotoVideo, vm::changeAutoPhotoVideo,
+                )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Save to", style = MaterialTheme.typography.titleSmall)
                     Hint(
@@ -249,7 +254,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Buy me a buñuelo") }
+                    ) { Text("Buy me a kebab (\$5)") }
                     SwitchRow("Show the support card", "On the main screen, below the link box.", vm.supportCard, vm::changeSupportCard)
                 }
                 Hint("Free software (GPL-3.0). Download only content you have the right to save.")

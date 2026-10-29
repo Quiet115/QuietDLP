@@ -285,9 +285,9 @@ private fun SupportCard() {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Buy me a buñuelo", style = MaterialTheme.typography.titleSmall)
+                Text("Buy me a kebab", style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "QuietDLP is free. A small tip keeps it going.",
+                    "QuietDLP is free. A kebab is \$5.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -711,6 +711,9 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                                     }
                                     if (ConvertTargets.canConvert(item.mime)) {
                                         TextButton(onClick = { askConvert = true }) { Text("Convert") }
+                                    }
+                                    if (item.photoVideo) {
+                                        TextButton(onClick = { vm.makeVideo(item) }) { Text("Make video") }
                                     }
                                 }
                                 IconButton(onClick = {
