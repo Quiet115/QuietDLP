@@ -6,10 +6,15 @@ import org.junit.Test
 
 class SlideshowTest {
     @Test
-    fun secondsPerImageSplitsTheSongButStaysReasonable() {
+    fun secondsPerImageSplitsTheWholeSong() {
         assertEquals(10.0 / 2, Slideshow.secondsPerImage(10_000, 2), 0.001)
         assertEquals(3.0, Slideshow.secondsPerImage(10_000, 10), 0.001)
-        assertEquals(8.0, Slideshow.secondsPerImage(60_000, 2), 0.001)
+        // Una sola foto dura lo que la canción, no un máximo fijo.
+        assertEquals(28.0, Slideshow.secondsPerImage(28_000, 1), 0.001)
+        assertEquals(30.0, Slideshow.secondsPerImage(60_000, 2), 0.001)
+        // Pero nunca más de 90 segundos en total.
+        assertEquals(90.0, Slideshow.secondsPerImage(300_000, 1), 0.001)
+        assertEquals(45.0, Slideshow.secondsPerImage(300_000, 2), 0.001)
         assertEquals(4.0, Slideshow.secondsPerImage(0, 3), 0.001)
         assertEquals(4.0, Slideshow.secondsPerImage(30_000, 0), 0.001)
         assertEquals(30_000L, Slideshow.totalMs(5, 6.0))
@@ -33,6 +38,8 @@ class SlideshowTest {
         assertEquals(3, c.count { it == "-loop" })
         assertEquals(4, c.count { it == "-i" })
         assertEquals("song.m4a", c[c.lastIndexOf("-i") + 1])
+        // La canción se repite si las fotos duran más que ella.
+        assertEquals("-stream_loop", c[c.lastIndexOf("-i") - 2])
         assertEquals("3:a:0", c[c.indexOf("[v]") + 2])
         assertTrue("concat=n=3" in c[c.indexOf("-filter_complex") + 1])
         assertTrue("4.500" in c)

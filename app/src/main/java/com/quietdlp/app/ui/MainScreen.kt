@@ -2,6 +2,7 @@ package com.quietdlp.app.ui
 
 import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -40,6 +41,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -50,6 +52,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -702,6 +706,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                         when {
                             item.isActive -> TextButton(onClick = { vm.cancel(item.id) }) { Text("Cancel") }
                             item.state == State.DONE -> {
+                                if (!item.isConversion) LinkMenu(item.url)
                                 if (item.savedUris.isNotEmpty()) {
                                     IconButton(onClick = {
                                         runCatching { ctx.startActivity(Sharing.chooser(item.savedUris.map(Uri::parse), item.mime)) }
@@ -721,6 +726,7 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                                 }) { Icon(Icons.Default.Delete, contentDescription = "Remove from list") }
                             }
                             else -> {
+                                if (!item.isConversion) LinkMenu(item.url)
                                 if (item.state == State.FAILED && item.loginHost != null) {
                                     Button(onClick = {
                                         vm.promptLogin(
@@ -740,6 +746,38 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                     }
                 }
             }
+        }
+    }
+}
+
+/** Menú de tres puntos de cada descarga: abrir el enlace original (para volver a la publicación) o copiarlo. */
+@Composable
+private fun LinkMenu(link: String) {
+    val ctx = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Open original link") },
+                onClick = {
+                    open = false
+                    try {
+                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (_: ActivityNotFoundException) {
+                        Toast.makeText(ctx, "No app can open this link", Toast.LENGTH_SHORT).show()
+                    }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Copy link") },
+                onClick = {
+                    open = false
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("link", link))
+                    Toast.makeText(ctx, "Link copied", Toast.LENGTH_SHORT).show()
+                },
+            )
         }
     }
 }

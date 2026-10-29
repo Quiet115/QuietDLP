@@ -10,14 +10,20 @@ object Slideshow {
     const val MAX_IMAGES = 30
 
     private const val MIN_SECONDS = 3.0
-    private const val MAX_SECONDS = 8.0
+    private const val MAX_TOTAL_SECONDS = 90.0
     private const val DEFAULT_SECONDS = 4.0
     private const val SHORT_SIDE = 1080
     private const val LONG_SIDE = 1920
 
-    /** Segundos por foto: lo que reparta la canción entre las fotos, entre 3 y 8. */
-    fun secondsPerImage(audioMs: Long, count: Int): Double =
-        if (audioMs <= 0 || count <= 0) DEFAULT_SECONDS else (audioMs / 1000.0 / count).coerceIn(MIN_SECONDS, MAX_SECONDS)
+    /**
+     * Segundos por foto: la canción repartida entre las fotos, con un mínimo de 3. Así el vídeo dura lo que la
+     * canción (hasta 90 segundos); si las fotos piden más tiempo que la canción, esta se repite.
+     */
+    fun secondsPerImage(audioMs: Long, count: Int): Double {
+        if (audioMs <= 0 || count <= 0) return DEFAULT_SECONDS
+        val total = min(audioMs / 1000.0, MAX_TOTAL_SECONDS)
+        return maxOf(MIN_SECONDS, total / count)
+    }
 
     fun totalMs(count: Int, secondsPerImage: Double): Long = (count * secondsPerImage * 1000).toLong()
 
@@ -42,7 +48,7 @@ object Slideshow {
         slow = true, lossless = false, args = emptyList(),
     )
 
-    /** Comando de ffmpeg: las fotos en orden (cada una [secondsPerImage] segundos) y el audio, hasta que acabe lo más corto. */
+    /** Comando de ffmpeg: las fotos en orden (cada una [secondsPerImage] segundos) y el audio, que se repite si hace falta. */
     fun command(images: List<String>, audio: String, output: String, width: Int, height: Int, secondsPerImage: Double): List<String> {
         require(images.isNotEmpty()) { "No images" }
         val sec = String.format(Locale.US, "%.3f", secondsPerImage)
@@ -52,7 +58,7 @@ object Slideshow {
             images.indices.joinToString("") { "[v$it]" } + "concat=n=${images.size}:v=1:a=0[v]"
         return listOf("-hide_banner", "-nostdin", "-y") +
             images.flatMap { listOf("-loop", "1", "-framerate", "25", "-t", sec, "-i", it) } +
-            listOf("-i", audio, "-filter_complex", filter, "-map", "[v]", "-map", "${images.size}:a:0") +
+            listOf("-stream_loop", "-1", "-i", audio, "-filter_complex", filter, "-map", "[v]", "-map", "${images.size}:a:0") +
             listOf(
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",
