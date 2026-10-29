@@ -32,6 +32,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("auto_photo_video", false)
         set(v) = sp.edit().putBoolean("auto_photo_video", v).apply()
 
+    /** "Make video" guarda la duración que se elige (si no, vale solo esa vez). Desactivado por defecto. */
+    var rememberSong: Boolean
+        get() = sp.getBoolean("remember_song", false)
+        set(v) = sp.edit().putBoolean("remember_song", v).apply()
+
     /** Cuánto suena la canción en el vídeo de fotos con música, en segundos. 0 = entera. */
     var songSeconds: Int
         get() = sp.getInt("song_seconds", 0)

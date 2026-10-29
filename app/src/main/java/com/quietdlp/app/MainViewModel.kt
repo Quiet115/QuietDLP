@@ -623,15 +623,29 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun convert(item: DownloadItem, target: ConvertTarget) = DownloadService.convert(app, item, target)
 
     /** Hace un vídeo con las fotos de una publicación y su canción. */
-    fun makeVideo(item: DownloadItem, songSeconds: Int) {
-        this.songSeconds = songSeconds
-        prefs.songSeconds = songSeconds
-        DownloadService.makeVideo(app, item, songSeconds)
+    /** [remember] = la casilla "Remember my choice": solo entonces la duración elegida pasa a ser la de por defecto. */
+    fun makeVideo(item: DownloadItem, seconds: Int, remember: Boolean) {
+        changeRememberSong(remember)
+        if (remember) changeSongSeconds(seconds)
+        DownloadService.makeVideo(app, item, seconds)
     }
 
-    /** Hasta cuándo suena la canción en el vídeo (0 = entera): la última elección, que también usa el modo automático. */
+    /** Hasta cuándo suena la canción en el vídeo (0 = entera): con lo que empieza la ventana y lo que usa el modo automático. */
     var songSeconds by mutableIntStateOf(prefs.songSeconds)
         private set
+
+    fun changeSongSeconds(v: Int) {
+        songSeconds = v
+        prefs.songSeconds = v
+    }
+
+    var rememberSong by mutableStateOf(prefs.rememberSong)
+        private set
+
+    fun changeRememberSong(v: Boolean) {
+        rememberSong = v
+        prefs.rememberSong = v
+    }
 
     // ── Búsqueda y selección en el historial ──
     var searchQuery by mutableStateOf("")

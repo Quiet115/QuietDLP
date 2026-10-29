@@ -73,6 +73,7 @@ import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.Quality
 import com.quietdlp.app.data.SiteRule
 import com.quietdlp.app.data.SiteRules
+import com.quietdlp.app.data.Slideshow
 import com.quietdlp.app.download.CookieStore
 import com.quietdlp.app.download.ErrorLog
 import com.quietdlp.app.update.AppUpdater
@@ -133,6 +134,20 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     "Video from photos and music",
                     if (vm.autoPhotoVideo) "Makes the video by itself when a post has a song." else "Off. Use Make video on the download.",
                     vm.autoPhotoVideo, vm::changeAutoPhotoVideo,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Song length in videos", style = MaterialTheme.typography.titleSmall)
+                    Hint("How long the song plays when you make a video from photos.")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Slideshow.SONG_LENGTHS.forEach { (seconds, label) ->
+                            QuietChip(vm.songSeconds == seconds, { vm.changeSongSeconds(seconds) }, label)
+                        }
+                    }
+                }
+                SwitchRow(
+                    "Remember my choice",
+                    if (vm.rememberSong) "Make video saves the length you pick." else "Off. Make video starts from the length above.",
+                    vm.rememberSong, vm::changeRememberSong,
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Save to", style = MaterialTheme.typography.titleSmall)
