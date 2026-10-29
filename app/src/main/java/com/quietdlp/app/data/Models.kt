@@ -7,17 +7,19 @@ enum class State { QUEUED, PREPARING, DOWNLOADING, PROCESSING, DONE, FAILED, CAN
 
 /**
  * Calidad pedida. [maxHeight] = 0 significa "la mejor disponible".
- * [audioFormat] solo se usa cuando [kind] es AUDIO ("m4a" o "mp3").
+ * [audioFormat] solo se usa cuando [kind] es AUDIO (ver [AudioOptions]).
  */
 data class Quality(
     val kind: Kind,
     val maxHeight: Int = 0,
     val audioFormat: String = "m4a",
-    /** Tope de bitrate en kbps para audio recodificado (MP3). 0 = la mejor calidad. */
+    /** Bitrate en kbps para audio recodificado con pérdida (MP3, Opus). 0 = lo que dé el codificador por defecto. */
     val audioBitrate: Int = 0,
 ) {
     fun label(): String = when (kind) {
-        Kind.AUDIO -> "Audio ${audioFormat.uppercase()}" + if (audioBitrate > 0) " ${audioBitrate}k" else ""
+        Kind.AUDIO ->
+            if (audioFormat == "best") "Audio (original)"
+            else "Audio ${audioFormat.uppercase()}" + if (audioBitrate > 0) " ${audioBitrate}k" else ""
         Kind.PHOTO -> "Photos"
         Kind.VIDEO -> if (maxHeight > 0) "Video ${maxHeight}p" else "Video (best quality)"
     }
@@ -36,6 +38,9 @@ fun resolutionName(p: Int): String = when (p) {
     else -> "${p}p"
 }
 
+/** Las conversiones de archivos ya descargados se anotan en el historial con una "url" que empieza así. */
+const val CONVERT_URL_PREFIX = "quietdlp-convert:"
+
 data class DownloadItem(
     val id: String,
     val url: String,
@@ -53,6 +58,9 @@ data class DownloadItem(
     val loginHost: String? = null,
 ) {
     val savedUri: String? get() = savedUris.firstOrNull()
+
+    /** true si es una conversión de un archivo ya guardado y no una descarga de un enlace. */
+    val isConversion: Boolean get() = url.startsWith(CONVERT_URL_PREFIX)
 
     val isActive: Boolean
         get() = state == State.QUEUED || state == State.PREPARING ||

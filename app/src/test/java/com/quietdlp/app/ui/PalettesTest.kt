@@ -50,10 +50,20 @@ class PalettesTest {
             val s = Palettes.scheme(p)
             assertTrue("${p.id} text on background", contrast(s.onBackground, s.background) >= 7f)
             assertTrue("${p.id} text on card", contrast(s.onSurface, s.surfaceContainer) >= 7f)
-            assertTrue("${p.id} accent on background", contrast(s.primary, s.background) >= 3f)
+            assertTrue("${p.id} accent on background", contrast(s.primary, s.background) >= 4.5f)
             assertTrue("${p.id} text on accent", contrast(s.onPrimary, s.primary) >= 4.5f)
             assertTrue("${p.id} muted text on card", contrast(s.onSurfaceVariant, s.surfaceContainer) >= 4.5f)
         }
+    }
+
+    @Test
+    fun systemPaletteIsCalledWallpaperAndOldIdIsMigrated() {
+        assertEquals("wallpaper", Palettes.SYSTEM)
+        assertEquals(Palettes.SYSTEM, Palettes.normalizeId("system"))
+        assertEquals(Palettes.SYSTEM, Palettes.normalizeId("wallpaper"))
+        assertEquals("sky", Palettes.normalizeId("sky"))
+        assertEquals("c1", Palettes.normalizeId("c1"))
+        assertEquals(Palettes.DEFAULT, Palettes.normalizeId(null))
     }
 
     @Test
@@ -88,7 +98,7 @@ class PalettesTest {
             val c = Palettes.suggest(dark, h, (h + 120) % 360, t)
             val s = Palettes.scheme(Palettes.fromColors("x", "x", c[0], c[1], c[2], c[3]))
             assertTrue("dark=$dark h=$h t=$t text", contrast(s.onBackground, s.background) >= 7f)
-            assertTrue("dark=$dark h=$h t=$t accent", contrast(s.primary, s.background) >= 3f)
+            assertTrue("dark=$dark h=$h t=$t accent", contrast(s.primary, s.background) >= 4.5f)
             assertTrue("dark=$dark h=$h t=$t onPrimary", contrast(s.onPrimary, s.primary) >= 4.5f)
         }
         // Valores fuera de rango no rompen nada.

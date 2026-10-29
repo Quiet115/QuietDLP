@@ -6,6 +6,10 @@ import android.content.Intent
 import android.content.Context
 import android.os.Build
 import android.widget.Toast
+import com.quietdlp.app.data.AppOrientation
+import com.quietdlp.app.data.AudioOption
+import com.quietdlp.app.data.AudioOptions
+import com.quietdlp.app.data.ConvertTarget
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.FolderName
 import com.quietdlp.app.ui.PaletteSpec
@@ -79,7 +83,9 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     // ── Elección para la descarga manual ──
     var kind by mutableStateOf(Kind.VIDEO)
     var height by mutableIntStateOf(0)
-    var audioFormat by mutableStateOf(prefs.audioFormat)
+    private val startAudio = AudioOptions.find(prefs.audioFormat, prefs.audioBitrate)
+    var audioFormat by mutableStateOf(startAudio.format)
+    var audioBitrate by mutableIntStateOf(startAudio.bitrate)
 
     // ── Motor ──
     var engineReady by mutableStateOf(false)
@@ -139,7 +145,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun rememberForSite(info: MediaInfo): String? {
         val host = SiteRules.normalizeHost(info.url) ?: return null
         if (kind == Kind.PHOTO) return null
-        saveSiteRule(host, Quality(kind, if (kind == Kind.VIDEO) height else 0, audioFormat))
+        saveSiteRule(host, Quality(kind, if (kind == Kind.VIDEO) height else 0, audioFormat, audioBitrate))
         return host
     }
 
@@ -482,26 +488,33 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         if (site != null) {
             kind = site.kind
             height = site.maxHeight
-            audioFormat = site.audioFormat
+            setAudio(site.audioFormat, site.audioBitrate)
         } else if (prefs.rememberLast) {
             kind = prefs.lastKind
             height = prefs.lastHeight
-            audioFormat = prefs.lastAudioFormat
+            setAudio(prefs.lastAudioFormat, prefs.lastAudioBitrate)
         } else {
             val q = prefs.mode.quality ?: Quality(Kind.VIDEO)
             kind = q.kind
             height = q.maxHeight
-            audioFormat = q.audioFormat
+            setAudio(q.audioFormat, q.audioBitrate)
         }
+    }
+
+    private fun setAudio(format: String, bitrate: Int) {
+        val o = AudioOptions.find(format, bitrate)
+        audioFormat = o.format
+        audioBitrate = o.bitrate
     }
 
     fun download() {
         val i = info ?: return
-        val q = Quality(kind, height, audioFormat)
+        val q = Quality(kind, height, audioFormat, audioBitrate)
         if (prefs.rememberLast && kind != Kind.PHOTO) {
             prefs.lastKind = kind
             prefs.lastHeight = height
             prefs.lastAudioFormat = audioFormat
+            prefs.lastAudioBitrate = audioBitrate
         }
         requestDownload(i.url, q, i.title, i.thumbnail)
         info = null
@@ -597,6 +610,10 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     fun cancel(id: String) = DownloadService.cancel(app, id)
+
+    /** Convierte un archivo ya descargado a otro formato; el resultado aparece como un elemento nuevo del historial. */
+    fun convert(item: DownloadItem, target: ConvertTarget) = DownloadService.convert(app, item, target)
+
     // ── Búsqueda y selección en el historial ──
     var searchQuery by mutableStateOf("")
 
@@ -633,6 +650,15 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                 Toast.makeText(app, "Couldn't delete $failed ${if (failed == 1) "file" else "files"}", Toast.LENGTH_SHORT).show()
             }
         }
+    }
+
+    // ── Orientación de la pantalla ──
+    var orientation by mutableStateOf(prefs.orientation)
+        private set
+
+    fun changeOrientation(o: AppOrientation) {
+        orientation = o
+        prefs.orientation = o
     }
 
     // ── Tarjeta de apoyo ──
@@ -678,8 +704,9 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         if (!v) clipOffer = null
     }
 
-    fun chooseAudioFormat(f: String) {
-        audioFormat = f
-        prefs.audioFormat = f
+    fun chooseAudio(o: AudioOption) {
+        setAudio(o.format, o.bitrate)
+        prefs.audioFormat = o.format
+        prefs.audioBitrate = o.bitrate
     }
 }

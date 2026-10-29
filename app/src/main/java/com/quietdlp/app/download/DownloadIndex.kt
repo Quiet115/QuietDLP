@@ -43,7 +43,7 @@ object DownloadIndex {
     fun seed(ctx: Context, items: List<DownloadItem>) {
         if (file(ctx).exists()) return
         ensureLoaded(ctx)
-        val done = items.filter { it.state == State.DONE && it.savedUris.isNotEmpty() }.reversed()
+        val done = items.filter { it.state == State.DONE && it.savedUris.isNotEmpty() && !it.isConversion }.reversed()
         done.forEach { map[Duplicates.indexKey(it.url, it.quality.kind)] = it.savedUris }
         rewrite(ctx)
     }
