@@ -379,6 +379,14 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         prefs.photosEnabled = v
     }
 
+    var autoPhotoVideo by mutableStateOf(prefs.autoPhotoVideo)
+        private set
+
+    fun changeAutoPhotoVideo(v: Boolean) {
+        autoPhotoVideo = v
+        prefs.autoPhotoVideo = v
+    }
+
     fun changeAutoUpdate(v: Boolean) {
         autoUpdate = v
         prefs.autoUpdate = v
@@ -613,6 +621,9 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Convierte un archivo ya descargado a otro formato; el resultado aparece como un elemento nuevo del historial. */
     fun convert(item: DownloadItem, target: ConvertTarget) = DownloadService.convert(app, item, target)
+
+    /** Hace un vídeo con las fotos de una publicación y su canción. */
+    fun makeVideo(item: DownloadItem) = DownloadService.makeVideo(app, item)
 
     // ── Búsqueda y selección en el historial ──
     var searchQuery by mutableStateOf("")

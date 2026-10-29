@@ -27,6 +27,11 @@ class Prefs(context: Context) {
         get() = sp.getString("audio_format", "m4a") ?: "m4a"
         set(v) = sp.edit().putString("audio_format", v).apply()
 
+    /** Hacer solo un vídeo con las fotos de una publicación y su canción. Desactivado por defecto. */
+    var autoPhotoVideo: Boolean
+        get() = sp.getBoolean("auto_photo_video", false)
+        set(v) = sp.edit().putBoolean("auto_photo_video", v).apply()
+
     var audioBitrate: Int
         get() = sp.getInt("audio_bitrate", 0)
         set(v) = sp.edit().putInt("audio_bitrate", v).apply()

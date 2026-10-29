@@ -21,6 +21,23 @@ class HistoryJsonTest {
     )
 
     @Test
+    fun photoVideoFlagSurvivesAndOldHistoryReadsAsFalse() {
+        val withMusic = item("m", State.DONE).copy(photoVideo = true)
+        val back = HistoryJson.decode(HistoryJson.encode(listOf(withMusic, item("n", State.DONE))))
+        assertTrue(back[0].photoVideo)
+        assertTrue(!back[1].photoVideo)
+        val old = """[{"id":"x","url":"https://example.com/a","title":"T","kind":"PHOTO","height":0,"audioFmt":"m4a",""" +
+            """"audioBr":0,"state":"DONE","savedUris":["content://media/1"]}]"""
+        assertTrue(!HistoryJson.decode(old)[0].photoVideo)
+    }
+
+    @Test
+    fun conversionsAreRecognizedByTheirUrl() {
+        assertTrue(item("a", State.DONE).copy(url = CONVERT_URL_PREFIX + "content://x").isConversion)
+        assertTrue(!item("a", State.DONE).isConversion)
+    }
+
+    @Test
     fun roundTripKeepsEverything() {
         val list = listOf(
             item("a", State.DONE),

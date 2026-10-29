@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -15,6 +16,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.StatFs
+import android.webkit.MimeTypeMap
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -29,6 +31,7 @@ import com.quietdlp.app.data.FreeSpace
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.Prefs
 import com.quietdlp.app.data.Quality
+import com.quietdlp.app.data.Slideshow
 import com.quietdlp.app.data.State
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -56,6 +59,7 @@ class DownloadService : Service() {
         private const val ACTION_ENQUEUE = "com.quietdlp.app.ENQUEUE"
         private const val ACTION_CANCEL = "com.quietdlp.app.CANCEL"
         private const val ACTION_CONVERT = "com.quietdlp.app.CONVERT"
+        private const val ACTION_MAKE_VIDEO = "com.quietdlp.app.MAKE_VIDEO"
         private const val EXTRA_SRC_URI = "src_uri"
         private const val EXTRA_SRC_MIME = "src_mime"
         private const val EXTRA_TARGET = "target"
@@ -105,6 +109,14 @@ class DownloadService : Service() {
             ContextCompat.startForegroundService(ctx, i)
         }
 
+        /** Hace un vídeo con las fotos y la canción de una publicación ya descargada. */
+        fun makeVideo(ctx: Context, source: DownloadItem) {
+            ContextCompat.startForegroundService(
+                ctx,
+                Intent(ctx, DownloadService::class.java).setAction(ACTION_MAKE_VIDEO).putExtra(EXTRA_ID, source.id),
+            )
+        }
+
         fun cancel(ctx: Context, id: String) {
             ctx.startService(
                 Intent(ctx, DownloadService::class.java)
@@ -124,6 +136,11 @@ class DownloadService : Service() {
     private class ConvertJob(val sourceUri: String, val target: ConvertTarget, val sourceTitle: String)
 
     private val convertJobs = ConcurrentHashMap<String, ConvertJob>()
+
+    /** Lo mismo para un vídeo hecho con las fotos de una publicación y su canción. */
+    private class SlideshowJob(val imageUris: List<String>, val audioUri: String, val sourceTitle: String)
+
+    private val slideshowJobs = ConcurrentHashMap<String, SlideshowJob>()
 
     @Volatile
     private var lastStartId = 0
@@ -168,6 +185,7 @@ class DownloadService : Service() {
         when (intent?.action) {
             ACTION_ENQUEUE -> handleEnqueue(intent)
             ACTION_CONVERT -> handleConvert(intent)
+            ACTION_MAKE_VIDEO -> handleMakeVideo(intent)
             ACTION_CANCEL -> intent.getStringExtra(EXTRA_ID)?.let { handleCancel(it) }
         }
         if (pending.get() == 0) stopIfIdle()
@@ -228,6 +246,29 @@ class DownloadService : Service() {
         queue.trySend(item.id)
     }
 
+    private fun handleMakeVideo(intent: Intent) {
+        val source = intent.getStringExtra(EXTRA_ID)?.let { DownloadRepository.get(it) } ?: return
+        enqueueSlideshow(source)
+    }
+
+    /** Pone en cola un vídeo con las fotos y la canción de [source]. No hace nada si le falta una de las dos. */
+    private fun enqueueSlideshow(source: DownloadItem) {
+        val images = source.savedUris.filter { mimeOfUri(it)?.startsWith("image/") == true }.take(Slideshow.MAX_IMAGES)
+        val audio = source.savedUris.firstOrNull { mimeOfUri(it)?.startsWith("audio/") == true }
+        if (images.isEmpty() || audio == null) return
+        val item = DownloadItem(
+            id = UUID.randomUUID().toString(),
+            url = CONVERT_URL_PREFIX + "video:" + images.first(),
+            title = Slideshow.outputName(source.title).substringBeforeLast('.'),
+            thumbnail = source.thumbnail,
+            quality = Quality(Kind.VIDEO),
+        )
+        slideshowJobs[item.id] = SlideshowJob(images, audio, source.title)
+        DownloadRepository.add(item)
+        pending.incrementAndGet()
+        queue.trySend(item.id)
+    }
+
     private fun handleCancel(id: String) {
         cancelled.add(id)
         DownloadRepository.update(id) {
@@ -248,10 +289,15 @@ class DownloadService : Service() {
         if (id in cancelled) {
             cancelled.remove(id)
             convertJobs.remove(id)
+            slideshowJobs.remove(id)
             return
         }
         convertJobs.remove(id)?.let { job ->
             processConversion(item, job)
+            return
+        }
+        slideshowJobs.remove(id)?.let { job ->
+            processSlideshow(item, job)
             return
         }
         val tmp = File(cacheDir, "dl/$id").apply { mkdirs() }
@@ -319,8 +365,52 @@ class DownloadService : Service() {
         }
     }
 
+    /** Lo que ffmpeg tiene que hacer: el comando, el archivo que saldrá y, si se sabe, cuánto durará (para el avance). */
+    private class Plan(val command: List<String>, val output: File, val totalMs: Long = 0L)
+
     /** Convierte un archivo ya guardado con ffmpeg y guarda el resultado como un archivo nuevo. */
-    private suspend fun processConversion(item: DownloadItem, job: ConvertJob) {
+    private suspend fun processConversion(item: DownloadItem, job: ConvertJob) = runFfmpegJob(item) { tmp ->
+        val input = File(tmp, "input")
+        val size = copySource(job.sourceUri, input)
+        // La salida puede pesar tanto como la entrada o más (FLAC, WAV): sitio para las dos y un margen.
+        requireSpace(tmp, size * 2 + 50L * 1024 * 1024)
+        val out = File(tmp, ConvertTargets.outputName(job.sourceTitle, job.target))
+        Plan(job.target.command(input.absolutePath, out.absolutePath), out)
+    }
+
+    /** Junta las fotos de una publicación con su canción en un vídeo. */
+    private suspend fun processSlideshow(item: DownloadItem, job: SlideshowJob) = runFfmpegJob(item) { tmp ->
+        val images = job.imageUris.mapIndexed { i, uri ->
+            File(tmp, "img$i.${extensionOf(uri, "jpg")}").also { copySource(uri, it) }
+        }
+        val audio = File(tmp, "audio.${extensionOf(job.audioUri, "m4a")}").also { copySource(job.audioUri, it) }
+        requireSpace(tmp, 200L * 1024 * 1024)
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(images.first().absolutePath, bounds)
+        val (w, h) = Slideshow.canvas(bounds.outWidth, bounds.outHeight)
+        val seconds = Slideshow.secondsPerImage(MediaKinds.durationMs(audio), images.size)
+        val out = File(tmp, Slideshow.outputName(job.sourceTitle))
+        Plan(
+            Slideshow.command(images.map { it.absolutePath }, audio.absolutePath, out.absolutePath, w, h, seconds),
+            out, Slideshow.totalMs(images.size, seconds),
+        )
+    }
+
+    private fun requireSpace(dir: File, needed: Long) {
+        val free = StatFs(dir.absolutePath).availableBytes
+        if (free < needed) error(FreeSpace.message(free))
+    }
+
+    private fun mimeOfUri(uri: String): String? =
+        contentResolver.getType(Uri.parse(uri))
+            ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(MimeTypeMap.getFileExtensionFromUrl(uri).lowercase())
+
+    private fun extensionOf(uri: String, fallback: String): String =
+        mimeOfUri(uri)?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) }?.takeIf { it.isNotBlank() } ?: fallback
+
+    /** Hace el trabajo de [prepare] (copiar archivos y armar el comando), ejecuta ffmpeg y guarda el resultado. */
+    private suspend fun runFfmpegJob(item: DownloadItem, prepare: (File) -> Plan) {
         val id = item.id
         val tmp = File(cacheDir, "cv/$id").apply { mkdirs() }
         try {
@@ -328,15 +418,11 @@ class DownloadService : Service() {
             notifyProgress(item, "Getting ready…", -1, force = true)
             Engine.ensureReady(applicationContext)
 
-            val input = File(tmp, "input")
-            val size = copySource(job.sourceUri, input)
-            // La salida puede pesar tanto como la entrada o más (FLAC, WAV): sitio para las dos y un margen.
-            val free = StatFs(tmp.absolutePath).availableBytes
-            if (free < size * 2 + 50L * 1024 * 1024) error(FreeSpace.message(free))
+            val plan = prepare(tmp)
             if (id in cancelled) error("Canceled")
 
-            val out = File(tmp, ConvertTargets.outputName(job.sourceTitle, job.target))
-            Ffmpeg.run(applicationContext, id, job.target.command(input.absolutePath, out.absolutePath)) { pct ->
+            val out = plan.output
+            Ffmpeg.run(applicationContext, id, plan.command, plan.totalMs) { pct ->
                 if (id in cancelled) return@run
                 if (pct >= 0) {
                     DownloadRepository.update(id) {
@@ -431,11 +517,20 @@ class DownloadService : Service() {
         setState(id, State.PROCESSING, "Saving…")
         // Una publicación con varios vídeos (p. ej. un carrusel) genera varios archivos:
         // se guardan todos, no solo el más grande.
-        val files = tmp.listFiles()
+        val found = tmp.listFiles()
             ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
             ?.sortedBy { it.name }
             .orEmpty()
-        if (files.isEmpty()) error("yt-dlp finished but produced no file")
+        if (found.isEmpty()) error("yt-dlp finished but produced no file")
+
+        // Una publicación de fotos puede traer también su canción (Instagram): se reconoce aunque se llame ".mp4"
+        // y se deja después de las fotos, para que la miniatura y el título sean los de una foto.
+        val hasPhotos = found.any { MediaKinds.isImage(it) }
+        val files = if (hasPhotos) {
+            found.map { if (MediaKinds.isAudioOnly(it)) MediaKinds.asAudioFile(it) else it }
+                .sortedWith(compareBy({ !MediaKinds.isImage(it) }, { it.name }))
+        } else found
+        val photoVideo = hasPhotos && files.any { !MediaKinds.isImage(it) && MediaKinds.isAudioOnly(it) }
 
         val savedAll = files.map { MediaSaver.publish(applicationContext, it) }
         val saved = savedAll.first()
@@ -449,10 +544,12 @@ class DownloadService : Service() {
                 message = null,
                 savedUris = savedAll.map { it.uri.toString() },
                 mime = saved.mime,
+                photoVideo = photoVideo,
             )
         }
         DownloadIndex.record(applicationContext, item.url, item.quality.kind, savedAll.map { it.uri.toString() })
         notifyResult(id, title, ok = true, saved = saved, shareUris = savedAll.map { it.uri })
+        if (photoVideo && prefs.autoPhotoVideo) DownloadRepository.get(id)?.let { enqueueSlideshow(it) }
     }
 
     /** Espera a que haya internet (hasta 30 min). false = se canceló o se agotó el tiempo. */

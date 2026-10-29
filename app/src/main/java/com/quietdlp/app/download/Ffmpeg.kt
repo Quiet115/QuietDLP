@@ -19,7 +19,7 @@ object Ffmpeg {
      * Ejecuta ffmpeg con [command] (sin el nombre del programa). [onPercent] recibe 0..99 mientras avanza
      * (o -1 si no se conoce la duración). Lanza una excepción con la causa si ffmpeg falla.
      */
-    fun run(ctx: Context, id: String, command: List<String>, onPercent: (Int) -> Unit) {
+    fun run(ctx: Context, id: String, command: List<String>, knownTotalMs: Long = 0L, onPercent: (Int) -> Unit) {
         val bin = File(ctx.applicationInfo.nativeLibraryDir, "libffmpeg.so")
         val pb = ProcessBuilder(listOf(bin.absolutePath) + command)
             .redirectErrorStream(true)
@@ -32,7 +32,7 @@ object Ffmpeg {
         running[id] = p
         try {
             val tail = ArrayDeque<String>()
-            var totalMs = 0L
+            var totalMs = knownTotalMs
             var lastPercent = -2
             p.inputStream.bufferedReader().forEachLine { line ->
                 if (tail.size >= 40) tail.removeFirst()
