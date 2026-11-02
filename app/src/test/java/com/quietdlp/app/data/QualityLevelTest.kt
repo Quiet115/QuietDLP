@@ -14,6 +14,16 @@ class QualityLevelTest {
     }
 
     @Test
+    fun qualityOfALevelRoundTripsForBothKinds() {
+        QualityLevel.entries.forEach {
+            assertEquals(it, QualityLevel.fromQuality(it.quality(Kind.VIDEO)))
+            assertEquals(it, QualityLevel.fromQuality(it.quality(Kind.AUDIO)))
+        }
+        assertEquals(Quality(Kind.VIDEO, 720), QualityLevel.MEDIUM.quality(Kind.VIDEO))
+        assertEquals(Quality(Kind.AUDIO, 0, "mp3", 128), QualityLevel.LOW.quality(Kind.AUDIO))
+    }
+
+    @Test
     fun videoLevelsGoFromTheBestToTheSmallest() {
         // 0 = sin tope (la mejor que haya); después 720p y 480p.
         assertEquals(listOf(0, 720, 480), QualityLevel.entries.map { it.videoHeight })

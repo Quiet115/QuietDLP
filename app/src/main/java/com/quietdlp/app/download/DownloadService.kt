@@ -24,6 +24,8 @@ import com.quietdlp.app.MainActivity
 import com.quietdlp.app.Sharing
 import com.quietdlp.app.data.AudioOptions
 import com.quietdlp.app.data.CONVERT_URL_PREFIX
+import com.quietdlp.app.data.ConcurrencyGate
+import com.quietdlp.app.data.HistoryGroups
 import com.quietdlp.app.data.ConvertTarget
 import com.quietdlp.app.data.ConvertTargets
 import com.quietdlp.app.data.DownloadItem
@@ -60,6 +62,11 @@ class DownloadService : Service() {
         private const val ACTION_CANCEL = "com.quietdlp.app.CANCEL"
         private const val ACTION_CONVERT = "com.quietdlp.app.CONVERT"
         private const val ACTION_MAKE_VIDEO = "com.quietdlp.app.MAKE_VIDEO"
+        private const val ACTION_REQUEUE = "com.quietdlp.app.REQUEUE"
+        private const val ACTION_CANCEL_MANY = "com.quietdlp.app.CANCEL_MANY"
+        private const val ACTION_CANCEL_ALL = "com.quietdlp.app.CANCEL_ALL"
+        private const val EXTRA_IDS = "ids"
+        private const val EXTRA_WIFI_ONLY = "wifi_only"
         private const val EXTRA_SRC_URI = "src_uri"
         private const val EXTRA_SRC_MIME = "src_mime"
         private const val EXTRA_TARGET = "target"
@@ -77,6 +84,9 @@ class DownloadService : Service() {
         private const val CH_RESULT = "result_quiet"
         private const val NOTIF_PROGRESS = 1
         private const val MAX_NET_WAITS = 6
+        private const val MAX_RATE_WAITS = 4
+        private const val RATE_WAIT_MS = 15_000L
+        private const val WAKE_LOCK_MS = 8 * 60 * 60 * 1000L
 
         fun enqueue(
             ctx: Context,
@@ -84,9 +94,11 @@ class DownloadService : Service() {
             quality: Quality,
             title: String? = null,
             thumbnail: String? = null,
+            wifiOnly: Boolean = false,
         ) {
             val i = Intent(ctx, DownloadService::class.java)
                 .setAction(ACTION_ENQUEUE)
+                .putExtra(EXTRA_WIFI_ONLY, wifiOnly)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_THUMB, thumbnail)
@@ -126,6 +138,29 @@ class DownloadService : Service() {
                     .putExtra(EXTRA_ID, id),
             )
         }
+
+        fun cancelMany(ctx: Context, ids: List<String>) {
+            if (ids.isEmpty()) return
+            ctx.startService(
+                Intent(ctx, DownloadService::class.java)
+                    .setAction(ACTION_CANCEL_MANY)
+                    .putStringArrayListExtra(EXTRA_IDS, ArrayList(ids)),
+            )
+        }
+
+        /**
+         * Pone en la cola descargas que ya están en la lista: las de un grupo recién creado (en el orden dado)
+         * o las que fallaron y se reintentan. El servicio las busca por id, así no hace falta pasar sus datos.
+         */
+        fun enqueueExisting(ctx: Context, ids: List<String>) {
+            if (ids.isEmpty()) return
+            ContextCompat.startForegroundService(
+                ctx,
+                Intent(ctx, DownloadService::class.java)
+                    .setAction(ACTION_REQUEUE)
+                    .putStringArrayListExtra(EXTRA_IDS, ArrayList(ids)),
+            )
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -133,6 +168,18 @@ class DownloadService : Service() {
     private val pending = AtomicInteger(0)
     private val cancelled = ConcurrentHashMap.newKeySet<String>()
     private val main = Handler(Looper.getMainLooper())
+
+    /** Cuántas descargas van a la vez. Baja a 1 si una web empieza a rechazar por ir muy rápido. */
+    private lateinit var gate: ConcurrencyGate
+
+    /** Grupos de los que ya se avisó que terminaron (un solo aviso por grupo, no uno por archivo). */
+    private val notifiedGroups = ConcurrentHashMap.newKeySet<String>()
+
+    /** Descargas que ya salieron de la cola y están en marcha (ver [HistoryGroups.mustWait]). */
+    private val started = ConcurrentHashMap.newKeySet<String>()
+
+    /** Ids puestos en la cola por [handleRequeue] que aún no salieron de ella. */
+    private val queuedIds = ConcurrentHashMap.newKeySet<String>()
 
     /** Lo que hace falta para una conversión en cola (solo vive mientras el servicio está activo). */
     private class ConvertJob(val sourceUri: String, val target: ConvertTarget, val sourceTitle: String)
@@ -169,14 +216,30 @@ class DownloadService : Service() {
 
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "QuietDLP:download")
-            .apply { acquire(2 * 60 * 60 * 1000L) }
+            .apply { acquire(WAKE_LOCK_MS) }
 
-        scope.launch {
-            for (id in queue) {
-                try {
-                    process(id)
-                } finally {
-                    if (pending.decrementAndGet() <= 0) main.post { stopIfIdle() }
+        gate = ConcurrencyGate(prefs.maxParallel)
+        // Varios trabajadores sacan de la misma cola en orden. Cada uno pide su hueco ANTES de sacar la siguiente,
+        // así nunca se salta el orden y el tope (1 a 5) se puede bajar en caliente.
+        repeat(Prefs.MAX_PARALLEL) {
+            scope.launch {
+                while (true) {
+                    gate.acquire()
+                    val id = queue.receiveCatching().getOrNull()
+                    if (id == null) {
+                        gate.release()
+                        break
+                    }
+                    queuedIds -= id
+                    started += id
+                    try {
+                        process(id)
+                    } finally {
+                        started -= id
+                        gate.release()
+                        finishGroup(id)
+                        if (pending.decrementAndGet() <= 0) main.post { stopIfIdle() }
+                    }
                 }
             }
         }
@@ -188,7 +251,10 @@ class DownloadService : Service() {
             ACTION_ENQUEUE -> handleEnqueue(intent)
             ACTION_CONVERT -> handleConvert(intent)
             ACTION_MAKE_VIDEO -> handleMakeVideo(intent)
+            ACTION_REQUEUE -> handleRequeue(intent)
             ACTION_CANCEL -> intent.getStringExtra(EXTRA_ID)?.let { handleCancel(it) }
+            ACTION_CANCEL_MANY -> intent.getStringArrayListExtra(EXTRA_IDS)?.forEach { handleCancel(it) }
+            ACTION_CANCEL_ALL -> DownloadRepository.items.value.filter { it.isActive }.forEach { handleCancel(it.id) }
         }
         if (pending.get() == 0) stopIfIdle()
         return START_NOT_STICKY
@@ -224,10 +290,25 @@ class DownloadService : Service() {
                 ?: UrlUtils.shorten(url),
             thumbnail = intent.getStringExtra(EXTRA_THUMB),
             quality = quality,
+            wifiOnly = intent.getBooleanExtra(EXTRA_WIFI_ONLY, false),
         )
         DownloadRepository.add(item)
         pending.incrementAndGet()
         queue.trySend(item.id)
+    }
+
+    /** Pone en cola, en el orden recibido, descargas que ya están en la lista (un grupo nuevo o reintentos). */
+    private fun handleRequeue(intent: Intent) {
+        val ids = intent.getStringArrayListExtra(EXTRA_IDS) ?: return
+        for (id in ids) {
+            val item = DownloadRepository.get(id) ?: continue
+            item.groupId?.let(notifiedGroups::remove)
+            cancelled.remove(id)
+            // Si todavía está en la cola (se canceló y se reintenta enseguida) basta con quitarle la cancelación.
+            if (!queuedIds.add(id)) continue
+            pending.incrementAndGet()
+            queue.trySend(id)
+        }
     }
 
     private fun handleConvert(intent: Intent) {
@@ -308,15 +389,29 @@ class DownloadService : Service() {
         val tmp = File(cacheDir, "dl/$id").apply { mkdirs() }
         try {
             var waits = 0
+            var slowed = 0
             while (true) {
+                // Con "solo Wi-Fi" no se empieza (ni se retoma) con datos móviles.
+                if (!awaitNetworkAllowed(item)) error("Canceled")
                 try {
                     attempt(item, tmp)
                     return
                 } catch (e: CancellationException) {
                     throw e
                 } catch (t: Throwable) {
+                    if (id in cancelled) throw t
+                    // La web rechaza por ir muy rápido: pasar a una descarga a la vez y reintentar con calma, en este mismo hueco.
+                    if (Errors.isRateLimited(t) && slowed < MAX_RATE_WAITS) {
+                        slowed++
+                        gate.limit = 1
+                        val msg = "Site is busy, slowing down…"
+                        setState(id, State.QUEUED, msg)
+                        notifyProgress(item, msg, -1, force = true)
+                        delay(RATE_WAIT_MS * slowed)
+                        continue
+                    }
                     // Sin internet: esperar a que vuelva y seguir donde se quedó (yt-dlp retoma los .part).
-                    if (id in cancelled || waits >= MAX_NET_WAITS || !Errors.isNetwork(t)) throw t
+                    if (waits >= MAX_NET_WAITS || !Errors.isNetwork(t)) throw t
                     waits++
                     val msg = "Waiting for connection…"
                     setState(id, State.QUEUED, msg)
@@ -340,16 +435,78 @@ class DownloadService : Service() {
                 DownloadRepository.update(id) {
                     it.copy(state = State.FAILED, message = msg, loginHost = loginHost)
                 }
-                notifyResult(
-                    id, item.title, ok = false,
-                    error = if (loginHost != null) "Sign-in required. Tap to continue." else msg,
-                    item = item, loginHost = loginHost,
-                )
+                // Los archivos de un grupo avisan todos juntos al terminar (ver finishGroup), no uno por uno.
+                if (item.groupId == null) {
+                    notifyResult(
+                        id, item.title, ok = false,
+                        error = if (loginHost != null) "Sign-in required. Tap to continue." else msg,
+                        item = item, loginHost = loginHost,
+                    )
+                }
             }
         } finally {
             cancelled.remove(id)
             tmp.deleteRecursively()
         }
+    }
+
+    /**
+     * Espera a que se pueda descargar con la red actual. Solo frena con "solo Wi-Fi" (el ajuste, o "Wait for Wi-Fi" en esa
+     * descarga) mientras la red sea de pago por uso o no haya. false = se canceló mientras esperaba.
+     */
+    private suspend fun awaitNetworkAllowed(item: DownloadItem): Boolean {
+        val id = item.id
+        var shown = false
+        while (true) {
+            if (id in cancelled) return false
+            if (!(item.wifiOnly || prefs.wifiOnly) || !Connectivity.isMetered(this)) return true
+            if (!shown) {
+                shown = true
+                val msg = "Waiting for Wi-Fi…"
+                setState(id, State.QUEUED, msg)
+                notifyProgress(item, msg, -1, force = true)
+            }
+            delay(3_000)
+        }
+    }
+
+    /** Cuando el último archivo de un grupo termina, un solo aviso con el resultado de todos. */
+    private fun finishGroup(id: String) {
+        val gid = DownloadRepository.get(id)?.groupId ?: return
+        val members = DownloadRepository.items.value.filter { it.groupId == gid }
+        if (members.isEmpty() || members.any { it.isActive }) return
+        if (!notifiedGroups.add(gid)) return
+        val done = members.count { it.state == State.DONE }
+        val failed = members.count { it.state == State.FAILED }
+        val text = buildString {
+            append("$done of ${members.size} saved")
+            if (failed > 0) append(" · $failed failed")
+        }
+        val title = members.firstNotNullOfOrNull { it.groupTitle } ?: "Downloads"
+        val builder = NotificationCompat.Builder(this, CH_RESULT)
+            .setSmallIcon(if (failed == 0) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
+            .setContentTitle(if (failed == 0) "Downloads complete" else "Downloads finished")
+            .setContentText("$title — $text")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$text"))
+            .setContentIntent(openAppIntent())
+            .setAutoCancel(true)
+        runCatching { nm.notify(gid.hashCode(), builder.build()) }
+    }
+
+    /** Antes de guardar su archivo, un archivo de un grupo espera a los anteriores del mismo grupo: así se guardan en orden. */
+    private suspend fun awaitTurn(item: DownloadItem) {
+        val id = item.id
+        var shown = false
+        while (id !in cancelled) {
+            val me = DownloadRepository.get(id) ?: return
+            if (!HistoryGroups.mustWait(DownloadRepository.items.value, me) { it in started }) return
+            if (!shown) {
+                shown = true
+                setState(id, State.PROCESSING, "Waiting for the files before it…")
+            }
+            delay(300)
+        }
+        error("Canceled")
     }
 
 
@@ -524,6 +681,7 @@ class DownloadService : Service() {
             if (item.quality.kind == Kind.VIDEO && prefs.photosEnabled) addPhotosIfAudioOnly(item, tmp)
         }
 
+        awaitTurn(item)
         setState(id, State.PROCESSING, "Saving…")
         // Una publicación con varios vídeos (p. ej. un carrusel) genera varios archivos:
         // se guardan todos, no solo el más grande.
@@ -558,7 +716,7 @@ class DownloadService : Service() {
             )
         }
         DownloadIndex.record(applicationContext, item.url, item.quality.kind, savedAll.map { it.uri.toString() })
-        notifyResult(id, title, ok = true, saved = saved, shareUris = savedAll.map { it.uri })
+        if (item.groupId == null) notifyResult(id, title, ok = true, saved = saved, shareUris = savedAll.map { it.uri })
         if (photoVideo && prefs.autoPhotoVideo) DownloadRepository.get(id)?.let { enqueueSlideshow(it) }
     }
 
@@ -693,14 +851,20 @@ class DownloadService : Service() {
         val now = System.currentTimeMillis()
         if (!force && now - lastNotifMs < 700) return
         lastNotifMs = now
+        // Con varias a la vez la notificación cuenta las que faltan, y "Cancel" las cancela todas.
+        val left = DownloadRepository.items.value.count { it.isActive }
+        val multi = left > 1
         val cancelIntent = PendingIntent.getService(
-            this, item.id.hashCode(),
+            this, if (multi) 0 else item.id.hashCode(),
             Intent(this, DownloadService::class.java)
-                .setAction(ACTION_CANCEL).putExtra(EXTRA_ID, item.id),
+                .setAction(if (multi) ACTION_CANCEL_ALL else ACTION_CANCEL).putExtra(EXTRA_ID, item.id),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val n: Notification = baseNotification(item.title, text, percent)
-            .addAction(0, "Cancel", cancelIntent)
+        val n: Notification = (
+            if (multi) baseNotification("QuietDLP", "$left downloads left", -1)
+            else baseNotification(item.title, text, percent)
+            )
+            .addAction(0, if (multi) "Cancel all" else "Cancel", cancelIntent)
             .build()
         runCatching { nm.notify(NOTIF_PROGRESS, n) }
     }

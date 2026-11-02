@@ -15,6 +15,20 @@ object UrlUtils {
         return raw.trimEnd('.', ',', ')', ']', '!', ';')
     }
 
+    /** Todos los enlaces distintos de un texto, en el orden en que aparecen. */
+    fun extractAll(text: String?): List<String> {
+        if (text.isNullOrBlank()) return emptyList()
+        return urlRegex.findAll(text).map { it.value.trimEnd('.', ',', ')', ']', '!', ';') }.distinct().toList()
+    }
+
+    /** Un vídeo de YouTube suelto (aunque el enlace traiga también una lista): se descarga solo ese vídeo. */
+    fun isSingleYoutubeVideo(url: String): Boolean {
+        val uri = runCatching { android.net.Uri.parse(url) }.getOrNull() ?: return false
+        val host = uri.host?.lowercase() ?: return false
+        if (host == "youtu.be") return true
+        return host.endsWith("youtube.com") && uri.path == "/watch" && !uri.getQueryParameter("v").isNullOrBlank()
+    }
+
     fun hostOf(url: String): String? =
         runCatching { android.net.Uri.parse(url).host }.getOrNull()?.lowercase()
 
@@ -59,6 +73,18 @@ object Errors {
     fun isNoVideo(t: Throwable): Boolean {
         val l = errorLineOf(t).lowercase()
         return "no video" in l || "unsupported url" in l || "no video formats" in l
+    }
+
+    /** true si la web está rechazando por pedir demasiado rápido (hay que ir más despacio, de uno en uno). */
+    fun isRateLimited(t: Throwable): Boolean = isRateLimitedText(errorLineOf(t))
+
+    // "429" suelto no vale: puede ser parte del identificador de un vídeo.
+    private val http429 = Regex("""(http error|status code|status|error|code) ?:? ?429\b|\b429 (client error|too many)""")
+
+    fun isRateLimitedText(line: String): Boolean {
+        val l = line.lowercase()
+        return http429.containsMatchIn(l) || "too many requests" in l || "rate limit" in l ||
+            "rate-limit" in l || "ratelimit" in l
     }
 
     /** true si el fallo parece una caída de internet (se espera a que vuelva y se reintenta). */

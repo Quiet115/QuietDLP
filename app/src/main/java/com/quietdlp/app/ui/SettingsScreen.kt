@@ -61,6 +61,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.quietdlp.app.Links
 import com.quietdlp.app.LoginActivity
 import com.quietdlp.app.MainViewModel
@@ -70,6 +72,7 @@ import com.quietdlp.app.data.DownloadMode
 import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.ErrorLogText
 import com.quietdlp.app.data.Kind
+import com.quietdlp.app.data.Prefs
 import com.quietdlp.app.data.Quality
 import com.quietdlp.app.data.SiteRule
 import com.quietdlp.app.data.SiteRules
@@ -168,6 +171,9 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     }
                 }
             }
+
+            // ───── Cola ─────
+            QueueSection(vm)
 
             // ───── Reglas por sitio ─────
             SitesSection(vm)
@@ -276,6 +282,54 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
             Box(Modifier.height(24.dp))
         }
+        }
+    }
+}
+
+/** Cuántas descargas a la vez, Wi-Fi o datos, qué hacer con enlaces de varios archivos y la batería. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QueueSection(vm: MainViewModel) {
+    val ctx = LocalContext.current
+    var restricted by remember { mutableStateOf(vm.batteryRestricted()) }
+    // Al volver del ajuste de Android, comprobar de nuevo cómo quedó.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { restricted = vm.batteryRestricted() }
+    SectionCard("Queue") {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Downloads at once", style = MaterialTheme.typography.titleSmall)
+            Hint("If a site starts refusing, it goes down to 1 by itself.")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (1..Prefs.MAX_PARALLEL).forEach { n -> QuietChip(vm.maxParallel == n, { vm.changeMaxParallel(n) }, "$n") }
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Network", style = MaterialTheme.typography.titleSmall)
+            Hint(
+                if (vm.wifiOnly) "Downloads wait until you have Wi-Fi."
+                else "On mobile data, big downloads ask first. Wi-Fi shared from another phone counts as mobile data.",
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuietChip(vm.wifiOnly, { vm.changeWifiOnly(true) }, "Wi-Fi only")
+                QuietChip(!vm.wifiOnly, { vm.changeWifiOnly(false) }, "Wi-Fi and data")
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Links with several files", style = MaterialTheme.typography.titleSmall)
+            Hint(if (vm.askMulti) "Asks which ones to download." else "Downloads all of them without asking.")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuietChip(vm.askMulti, { vm.changeAskMulti(true) }, "Ask me")
+                QuietChip(!vm.askMulti, { vm.changeAskMulti(false) }, "Download all")
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Battery", style = MaterialTheme.typography.titleSmall)
+            Hint(
+                if (restricted) "Android may pause downloads when the screen is off."
+                else "No limits. Downloads keep going with the screen off.",
+            )
+            OutlinedButton(onClick = { openBatterySetting(ctx, listOnly = !restricted) }) {
+                Text(if (restricted) "Allow without limits" else "Battery settings")
+            }
         }
     }
 }

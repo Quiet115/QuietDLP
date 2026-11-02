@@ -32,6 +32,25 @@ class HistoryJsonTest {
     }
 
     @Test
+    fun groupFieldsSurviveAndOldHistoryHasNoGroup() {
+        val grouped = item("g1", State.DONE).copy(groupId = "G", groupIndex = 7, groupTitle = "My list", wifiOnly = true)
+        val back = HistoryJson.decode(HistoryJson.encode(listOf(grouped, item("n", State.DONE))))
+        assertEquals("G", back[0].groupId)
+        assertEquals(7, back[0].groupIndex)
+        assertEquals("My list", back[0].groupTitle)
+        assertTrue(back[0].wifiOnly)
+        assertNull(back[1].groupId)
+        assertEquals(0, back[1].groupIndex)
+        assertTrue(!back[1].wifiOnly)
+    }
+
+    @Test
+    fun aLongPlaylistIsNotCutAt200() {
+        val many = (1..1000).map { item("p$it", State.DONE).copy(groupId = "G", groupIndex = it) }
+        assertEquals(1000, HistoryJson.decode(HistoryJson.encode(many)).size)
+    }
+
+    @Test
     fun historyFromTheClipExperimentStillLoads() {
         // La 0.3.3 y la 0.3.4 guardaban estas dos claves; ya no se usan, pero no deben romper nada.
         val json = """[{"id":"x","url":"https://example.com/a","title":"T","kind":"PHOTO","height":0,"audioFmt":"m4a",""" +

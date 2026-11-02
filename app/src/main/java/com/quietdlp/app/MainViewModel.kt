@@ -5,8 +5,16 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.Context
 import android.os.Build
+import android.os.PowerManager
 import android.widget.Toast
 import com.quietdlp.app.data.AppOrientation
+import com.quietdlp.app.data.PlaylistEntry
+import com.quietdlp.app.data.PlaylistInfo
+import com.quietdlp.app.data.PlaylistProbe
+import com.quietdlp.app.data.State
+import com.quietdlp.app.download.Connectivity
+import kotlinx.coroutines.async
+import java.util.UUID
 import com.quietdlp.app.data.AudioOption
 import com.quietdlp.app.data.AudioOptions
 import com.quietdlp.app.data.ConvertTarget
@@ -54,7 +62,15 @@ data class MediaInfo(
     val heights: List<Int>,
     /** > 0 → el enlace no tiene vídeo pero sí fotos (se descargan con gallery-dl). */
     val photoCount: Int = 0,
+    /** > 0 → el enlace es una lista con tantos vídeos (se pueden bajar todos). */
+    val playlistCount: Int = 0,
 )
+
+/** Un enlace con varios archivos: se pregunta cuáles bajar antes de empezar (ver [MainViewModel.confirmSelection]). */
+class SelectionPrompt(val title: String, val entries: List<PlaylistEntry>, val quality: Quality)
+
+/** Hay una descarga grande y el móvil está con datos: bajar ya o esperar al Wi-Fi. [start] recibe "esperar al Wi-Fi". */
+class DataPrompt(val start: (Boolean) -> Unit)
 
 /**
  * Una web pidió iniciar sesión. [quality] != null → al guardar la sesión se reintenta la descarga;
@@ -68,6 +84,9 @@ data class LoginPrompt(
     val thumbnail: String? = null,
     val oldItemId: String? = null,
 )
+
+/** Desde cuántos archivos se considera una cola larga (y se sugiere quitar la restricción de batería). */
+private const val LONG_QUEUE = 5
 
 class MainViewModel(private val app: Application) : AndroidViewModel(app) {
 
@@ -257,6 +276,11 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
 
     /** Reintenta una descarga fallida (misma calidad). */
     fun retry(item: com.quietdlp.app.data.DownloadItem) {
+        if (item.groupId != null) {
+            requeueInPlace(item)
+            DownloadService.enqueueExisting(app, listOf(item.id))
+            return
+        }
         DownloadRepository.remove(item.id)
         DownloadService.enqueue(app, item.url, item.quality, item.title, item.thumbnail)
     }
@@ -433,7 +457,30 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         scrollTopRequest++
     }
 
+    /** La lista de reproducción del enlace analizado, si es una (el cuadro de selección sale al pulsar Download). */
+    var playlist by mutableStateOf<PlaylistInfo?>(null)
+        private set
+
+    /** Lee la lista de un enlace sin descargar nada. null si no es una lista de varios archivos o no se pudo leer. */
+    private suspend fun probePlaylist(u: String): PlaylistInfo? = withContext(Dispatchers.IO) {
+        runCatching {
+            val req = YoutubeDLRequest(u).apply {
+                addOption("--flat-playlist")
+                addOption("-J")
+                addOption("--playlist-end", PlaylistProbe.MAX_ENTRIES)
+                if (UrlUtils.isSingleYoutubeVideo(u)) addOption("--no-playlist")
+                CookieStore.mergedPath(app)?.let { addOption("--cookies", it) }
+            }
+            PlaylistProbe.parse(YoutubeDL.execute(req).out, u)
+        }.getOrNull()
+    }
+
     fun analyze(raw: String) {
+        val links = UrlUtils.extractAll(raw)
+        if (links.size >= 2) {
+            startManyLinks(links)
+            return
+        }
         val u = UrlUtils.extract(raw)
         if (u == null) {
             error = "That's not a link."
@@ -444,7 +491,9 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         analyzing = true
         error = null
         info = null
+        playlist = null
         viewModelScope.launch {
+            val probe = async { probePlaylist(u) }
             try {
                 Engine.ensureReady(app)
                 val req = YoutubeDLRequest(u).apply {
@@ -461,18 +510,37 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     .filter { it >= 144 }
                     .distinct()
                     .sortedDescending()
+                val list = probe.await()
+                playlist = list
                 info = MediaInfo(
                     url = u,
-                    title = vi.title ?: vi.fulltitle ?: UrlUtils.shorten(u),
-                    thumbnail = vi.thumbnail,
-                    uploader = vi.uploader,
-                    durationSec = vi.duration,
+                    title = list?.title ?: vi.title ?: vi.fulltitle ?: UrlUtils.shorten(u),
+                    thumbnail = list?.entries?.firstNotNullOfOrNull { it.thumbnail } ?: vi.thumbnail,
+                    uploader = if (list != null) null else vi.uploader,
+                    durationSec = if (list != null) 0 else vi.duration,
                     heights = heights,
+                    playlistCount = list?.entries?.size ?: 0,
                 )
                 // Si no hay vídeo (solo audio) cambiar a audio automáticamente.
                 if (heights.isEmpty()) kind = Kind.AUDIO
                 if (height != 0 && height !in heights) height = 0
             } catch (t: Throwable) {
+                // Si el primer vídeo no se pudo leer pero el enlace es una lista, se ofrece igual (cada uno se intenta aparte).
+                val list = runCatching { probe.await() }.getOrNull()
+                if (list != null) {
+                    playlist = list
+                    info = MediaInfo(
+                        url = u,
+                        title = list.title,
+                        thumbnail = list.entries.firstNotNullOfOrNull { it.thumbnail },
+                        uploader = null,
+                        durationSec = 0,
+                        heights = listOf(1080, 720, 480, 360),
+                        playlistCount = list.entries.size,
+                    )
+                    error = null
+                    return@launch
+                }
                 // Sin vídeo: puede ser una publicación de fotos. Ver cuántas hay con gallery-dl.
                 if (prefs.photosEnabled && Errors.isNoVideo(t)) {
                     val n = runCatching {
@@ -559,10 +627,148 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             prefs.lastAudioFormat = audioFormat
             prefs.lastAudioBitrate = audioBitrate
         }
-        requestDownload(i.url, q, i.title, i.thumbnail)
+        val list = playlist
+        if (list != null && kind != Kind.PHOTO) requestGroup(list.title, list.entries, q)
+        else requestDownload(i.url, q, i.title, i.thumbnail)
         info = null
+        playlist = null
         url = ""
         error = null
+    }
+
+    // ── Varios archivos: listas, varios enlaces, cola ──
+
+    /** Varios enlaces pegados a la vez: cada uno es un archivo del grupo, con la elección de siempre para el primero. */
+    private fun startManyLinks(links: List<String>) {
+        applyDefaults(links.first())
+        val q = Quality(kind, height, audioFormat, audioBitrate)
+        error = null
+        url = ""
+        requestGroup("${links.size} links", links.map { PlaylistEntry(it, UrlUtils.shorten(it), null) }, q)
+    }
+
+    var selectionPrompt by mutableStateOf<SelectionPrompt?>(null)
+        private set
+
+    var dataPrompt by mutableStateOf<DataPrompt?>(null)
+        private set
+
+    /** Pregunta cuáles bajar (o baja todo directo si el usuario pidió no preguntar más). */
+    private fun requestGroup(title: String, entries: List<PlaylistEntry>, quality: Quality) {
+        if (prefs.askMulti) selectionPrompt = SelectionPrompt(title, entries, quality)
+        else startGroup(title, entries, quality)
+    }
+
+    fun confirmSelection(chosen: List<PlaylistEntry>, quality: Quality, dontAskAgain: Boolean) {
+        val p = selectionPrompt ?: return
+        selectionPrompt = null
+        if (dontAskAgain) changeAskMulti(false)
+        if (chosen.isNotEmpty()) startGroup(p.title, chosen, quality)
+    }
+
+    fun dismissSelection() {
+        selectionPrompt = null
+    }
+
+    /** Pone los archivos en la lista y en la cola, en el orden del enlace. */
+    private fun startGroup(title: String, entries: List<PlaylistEntry>, quality: Quality) {
+        beginDownloads(entries.size) { waitForWifi ->
+            val gid = UUID.randomUUID().toString()
+            val waiting = (waitForWifi || prefs.wifiOnly) && Connectivity.isMetered(app)
+            val items = entries.mapIndexed { i, e ->
+                DownloadItem(
+                    id = UUID.randomUUID().toString(),
+                    url = e.url,
+                    title = e.title,
+                    thumbnail = e.thumbnail,
+                    quality = quality,
+                    message = if (waiting) "Waiting for Wi-Fi…" else null,
+                    groupId = gid,
+                    groupIndex = i,
+                    groupTitle = title,
+                    wifiOnly = waitForWifi,
+                )
+            }
+            DownloadRepository.addAll(items)
+            DownloadService.enqueueExisting(app, items.map { it.id })
+            if (items.size >= LONG_QUEUE && !prefs.batteryHintOff && batteryRestricted()) batteryPrompt = true
+        }
+    }
+
+    /** Con datos móviles y una descarga grande, antes se pregunta (con "solo Wi-Fi" no hace falta: se espera sola). */
+    private fun beginDownloads(count: Int, start: (Boolean) -> Unit) {
+        if (!prefs.wifiOnly && count >= 2 && Connectivity.isOnline(app) && Connectivity.isMetered(app)) {
+            dataPrompt = DataPrompt(start)
+        } else {
+            start(false)
+        }
+    }
+
+    fun answerDataPrompt(waitForWifi: Boolean) {
+        val p = dataPrompt ?: return
+        dataPrompt = null
+        p.start(waitForWifi)
+    }
+
+    fun dismissDataPrompt() {
+        dataPrompt = null
+    }
+
+    // ── Batería ──
+    var batteryPrompt by mutableStateOf(false)
+        private set
+
+    /** true si Android puede pausar la app con la pantalla apagada (la app no está en la lista de "sin restricciones"). */
+    fun batteryRestricted(): Boolean {
+        val pm = app.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+        return !pm.isIgnoringBatteryOptimizations(app.packageName)
+    }
+
+    fun dismissBatteryPrompt(dontAskAgain: Boolean) {
+        batteryPrompt = false
+        if (dontAskAgain) prefs.batteryHintOff = true
+    }
+
+    /** Reintenta los fallidos de un grupo (cada uno en su sitio, sin perder el orden). */
+    fun retryFailed(items: List<DownloadItem>) {
+        val failed = items.filter { it.state == State.FAILED && !it.isConversion }
+        failed.forEach { requeueInPlace(it) }
+        DownloadService.enqueueExisting(app, failed.map { it.id })
+    }
+
+    fun cancelAll(items: List<DownloadItem>) {
+        DownloadService.cancelMany(app, items.filter { it.isActive }.map { it.id })
+    }
+
+    private fun requeueInPlace(item: DownloadItem) {
+        DownloadRepository.update(item.id) {
+            it.copy(state = State.QUEUED, message = null, progress = 0f, etaSeconds = 0, loginHost = null)
+        }
+    }
+
+    // ── Ajustes de la cola ──
+    var maxParallel by mutableIntStateOf(prefs.maxParallel)
+        private set
+
+    fun changeMaxParallel(v: Int) {
+        maxParallel = v.coerceIn(1, Prefs.MAX_PARALLEL)
+        prefs.maxParallel = maxParallel
+    }
+
+    var wifiOnly by mutableStateOf(prefs.wifiOnly)
+        private set
+
+    fun changeWifiOnly(v: Boolean) {
+        wifiOnly = v
+        prefs.wifiOnly = v
+    }
+
+    var askMulti by mutableStateOf(prefs.askMulti)
+        private set
+
+    fun changeAskMulti(v: Boolean) {
+        askMulti = v
+        prefs.askMulti = v
     }
 
     // ── Enlaces ya descargados ──

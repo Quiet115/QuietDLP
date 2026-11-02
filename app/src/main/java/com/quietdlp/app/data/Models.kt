@@ -58,6 +58,13 @@ data class DownloadItem(
     val loginHost: String? = null,
     /** Una publicación de fotos que trajo su canción: se puede hacer un vídeo con las dos cosas. */
     val photoVideo: Boolean = false,
+    /** Las descargas que salen del mismo enlace con varios archivos (lista, varios enlaces) comparten [groupId]. */
+    val groupId: String? = null,
+    /** Posición dentro del grupo (0 = el primero): los archivos se guardan en este orden. */
+    val groupIndex: Int = 0,
+    val groupTitle: String? = null,
+    /** Esperar a tener Wi-Fi (una red sin tarifa) antes de empezar. */
+    val wifiOnly: Boolean = false,
 ) {
     val savedUri: String? get() = savedUris.firstOrNull()
 

@@ -42,6 +42,12 @@ object DownloadRepository {
         save()
     }
 
+    /** Añade varias a la vez (un grupo), en el orden dado y todas juntas arriba de la lista. */
+    fun addAll(items: List<DownloadItem>) {
+        _items.update { items + it }
+        save()
+    }
+
     fun get(id: String): DownloadItem? = _items.value.firstOrNull { it.id == id }
 
     fun update(id: String, block: (DownloadItem) -> DownloadItem) {

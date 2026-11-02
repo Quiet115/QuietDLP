@@ -11,6 +11,10 @@ enum class QualityLevel(val label: String, val videoHeight: Int, val audioFormat
     MEDIUM("Medium", 720, "mp3", 192),
     LOW("Low", 480, "mp3", 128);
 
+    /** La elección detallada que corresponde a esta calidad para vídeo o audio. */
+    fun quality(kind: Kind): Quality =
+        if (kind == Kind.AUDIO) Quality(Kind.AUDIO, 0, audioFormat, audioBitrate) else Quality(Kind.VIDEO, videoHeight)
+
     companion object {
         /** La calidad que más se parece a una elección detallada (la del modo avanzado o la de un modo por defecto). */
         fun fromQuality(q: Quality): QualityLevel = when (q.kind) {

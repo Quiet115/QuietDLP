@@ -5,7 +5,8 @@ import org.json.JSONObject
 
 /** Convierte la lista de descargas a JSON y viceversa (funciones puras, para poder probarlas). */
 object HistoryJson {
-    const val MAX_ITEMS = 200
+    // Una lista de reproducción larga son muchas filas: el tope tiene que dejar sitio a varias.
+    const val MAX_ITEMS = 3000
 
     fun encode(items: List<DownloadItem>): String {
         val arr = JSONArray()
@@ -25,7 +26,11 @@ object HistoryJson {
                     .put("savedUris", JSONArray(i.savedUris))
                     .put("mime", i.mime)
                     .put("loginHost", i.loginHost)
-                    .put("photoVideo", i.photoVideo),
+                    .put("photoVideo", i.photoVideo)
+                    .put("groupId", i.groupId)
+                    .put("groupIndex", i.groupIndex)
+                    .put("groupTitle", i.groupTitle)
+                    .put("wifiOnly", i.wifiOnly),
             )
         }
         return arr.toString()
@@ -57,6 +62,10 @@ object HistoryJson {
                     mime = o.optStringOrNull("mime"),
                     loginHost = o.optStringOrNull("loginHost"),
                     photoVideo = o.optBoolean("photoVideo", false),
+                    groupId = o.optStringOrNull("groupId"),
+                    groupIndex = o.optInt("groupIndex", 0),
+                    groupTitle = o.optStringOrNull("groupTitle"),
+                    wifiOnly = o.optBoolean("wifiOnly", false),
                 )
             }.getOrNull()
         }

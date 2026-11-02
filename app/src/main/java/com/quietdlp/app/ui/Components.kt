@@ -168,10 +168,10 @@ private fun loadThumb(ctx: Context, uri: String): Bitmap? {
 
 /** Miniatura cuadrada de una descarga: la del archivo guardado, la de la web o un recuadro con la inicial del tipo. */
 @Composable
-fun FileThumb(item: DownloadItem, size: Dp = 72.dp) {
+fun FileThumb(item: DownloadItem, size: Dp = 72.dp, index: Int = 0) {
     val ctx = LocalContext.current
     val shape = RoundedCornerShape(16.dp)
-    val first = item.savedUris.firstOrNull()
+    val first = item.savedUris.getOrNull(index)
     val bitmap by produceState<Bitmap?>(null, first) {
         value = if (first == null) null else withContext(Dispatchers.IO) { loadThumb(ctx, first) }
     }

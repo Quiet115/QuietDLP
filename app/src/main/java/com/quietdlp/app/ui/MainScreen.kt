@@ -101,6 +101,8 @@ import com.quietdlp.app.data.ConvertTargets
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.DownloadMode
 import com.quietdlp.app.data.HistoryFilter
+import com.quietdlp.app.data.HistoryGroups
+import com.quietdlp.app.data.HistoryRow
 import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.QualityLevel
@@ -119,8 +121,12 @@ fun MainScreen(vm: MainViewModel) {
     val downloads by DownloadRepository.items.collectAsStateWithLifecycle()
     var showSettings by rememberSaveable { mutableStateOf(false) }
     val visible = HistoryFilter.filter(downloads, vm.searchQuery)
+    val rows = HistoryGroups.rows(visible)
+    // El grupo abierto en pantalla completa (se busca en la lista cada vez: sus archivos van cambiando).
+    var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
+    val openRow = openGroup?.let { id -> HistoryGroups.rows(downloads).filterIsInstance<HistoryRow.Group>().firstOrNull { it.id == id } }
     val selecting = vm.selected.isNotEmpty()
-    BackHandler(enabled = selecting && !showSettings) { vm.clearSelection() }
+    BackHandler(enabled = selecting && !showSettings && openRow == null) { vm.clearSelection() }
 
     // Al volver de la pantalla de inicio de sesión, refrescar qué cuentas hay guardadas.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshAccounts() }
@@ -140,7 +146,10 @@ fun MainScreen(vm: MainViewModel) {
     // "Download again" analiza el enlace arriba del todo: la lista vuelve al principio para que se vea.
     val listState = rememberLazyListState()
     LaunchedEffect(vm.scrollTopRequest) {
-        if (vm.scrollTopRequest > 0) listState.animateScrollToItem(0)
+        if (vm.scrollTopRequest > 0) {
+            openGroup = null
+            listState.animateScrollToItem(0)
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -160,7 +169,7 @@ fun MainScreen(vm: MainViewModel) {
                             Modifier.weight(0.58f).fillMaxHeight(),
                             contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
-                        ) { historySection(vm, downloads, visible, selecting) }
+                        ) { historySection(vm, rows, visible, selecting) { openGroup = it } }
                     }
                 } else {
                     // Una columna, centrada y con un ancho máximo para que no se estire.
@@ -172,10 +181,16 @@ fun MainScreen(vm: MainViewModel) {
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
                             inputSection(vm)
-                            historySection(vm, downloads, visible, selecting)
+                            historySection(vm, rows, visible, selecting) { openGroup = it }
                         }
                     }
                 }
+            }
+        }
+
+        if (openRow != null && !showSettings) {
+            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                GroupScreen(openRow, vm) { openGroup = null }
             }
         }
 
@@ -189,6 +204,9 @@ fun MainScreen(vm: MainViewModel) {
     if (vm.showUpdateNotice) UpdateNoticeDialog(vm)
     vm.loginPrompt?.let { LoginPromptDialog(vm, it) }
     vm.duplicatePrompt?.let { DuplicateDialog(vm) }
+    vm.selectionPrompt?.let { SelectionDialog(vm, it) }
+    vm.dataPrompt?.let { DataPromptDialog(vm) }
+    if (vm.batteryPrompt) BatteryPromptDialog(vm)
     if (vm.showAppUpdate) vm.appUpdate?.let { AppUpdateDialog(vm, it) }
 }
 
@@ -207,9 +225,10 @@ private fun LazyListScope.inputSection(vm: MainViewModel) {
 /** Parte de abajo: título (o barra de selección), búsqueda y lista de descargas. */
 private fun LazyListScope.historySection(
     vm: MainViewModel,
-    downloads: List<DownloadItem>,
+    rows: List<HistoryRow>,
     visible: List<DownloadItem>,
     selecting: Boolean,
+    onOpenGroup: (String) -> Unit,
 ) {
     item {
         if (selecting) {
@@ -222,15 +241,15 @@ private fun LazyListScope.historySection(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Downloads", style = MaterialTheme.typography.titleMedium)
-                    if (downloads.isNotEmpty()) StatusPill("${downloads.size}", Tone.NEUTRAL)
+                    if (rows.isNotEmpty()) StatusPill("${rows.size}", Tone.NEUTRAL)
                 }
-                if (downloads.any { !it.isActive }) {
+                if (visible.any { !it.isActive }) {
                     TextButton(onClick = vm::clearFinished) { Text("Clear list") }
                 }
             }
         }
     }
-    if (downloads.size >= 5 || vm.searchQuery.isNotEmpty()) item {
+    if (rows.size >= 5 || vm.searchQuery.isNotEmpty()) item {
         OutlinedTextField(
             value = vm.searchQuery,
             onValueChange = { vm.searchQuery = it },
@@ -243,11 +262,28 @@ private fun LazyListScope.historySection(
             },
         )
     }
-    if (downloads.isEmpty()) item { EmptyState() }
-    else if (visible.isEmpty()) item {
+    if (rows.isEmpty() && vm.searchQuery.isEmpty()) item { EmptyState() }
+    else if (rows.isEmpty()) item {
         Text("No matches.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    items(visible, key = { it.id }) { DownloadRow(it, vm, selecting, it.id in vm.selected) }
+    items(rows, key = { it.key }) { row ->
+        when (row) {
+            is HistoryRow.Single -> DownloadRow(row.item, vm, selecting, row.item.id in vm.selected)
+            is HistoryRow.Group -> {
+                val ids = row.items.map { it.id }
+                GroupCard(
+                    row, vm, selecting,
+                    selected = ids.all { it in vm.selected },
+                    onOpen = { onOpenGroup(row.id) },
+                    onToggleSelect = {
+                        // Elegir un grupo es elegir todos sus archivos (o quitarlos todos si ya estaban).
+                        if (ids.all { it in vm.selected }) ids.forEach { vm.toggleSelect(it) }
+                        else ids.filter { it !in vm.selected }.forEach { vm.toggleSelect(it) }
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -606,7 +642,11 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(info.title, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    val meta = listOfNotNull(info.uploader, formatDuration(info.durationSec)).joinToString(" · ")
+                    val meta = listOfNotNull(
+                        info.uploader,
+                        formatDuration(info.durationSec),
+                        if (info.playlistCount > 0) "${info.playlistCount} videos" else null,
+                    ).joinToString(" · ")
                     if (meta.isNotBlank()) {
                         Text(meta, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -643,7 +683,9 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                     }
                 }
 
-                Button(onClick = vm::download, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Download") }
+                Button(onClick = vm::download, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                    Text(if (info.playlistCount > 0 && vm.kind != Kind.PHOTO) "Download ${info.playlistCount} videos" else "Download")
+                }
                 if (info.photoCount == 0) {
                     val ctx = LocalContext.current
                     val host = SiteRules.normalizeHost(info.url)
@@ -665,8 +707,10 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolean, isSelected: Boolean) {
+internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolean, isSelected: Boolean) {
     val ctx = LocalContext.current
+    var showFiles by rememberSaveable { mutableStateOf(false) }
+    if (showFiles) FilesDialog(item, vm) { showFiles = false }
     var askDelete by rememberSaveable { mutableStateOf(false) }
     if (askDelete) {
         AlertDialog(
@@ -712,7 +756,12 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                FileThumb(item, 84.dp)
+                if (item.savedUris.size > 1) {
+                    // Varias fotos o vídeos en una publicación: las miniaturas se apilan.
+                    ThumbStack(item, (1..minOf(2, item.savedUris.size - 1)).map { item to it })
+                } else {
+                    FileThumb(item, 84.dp)
+                }
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -757,7 +806,9 @@ private fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolea
                                     IconButton(onClick = { openFile(ctx, item) }) {
                                         Icon(Icons.Default.PlayArrow, contentDescription = "Open")
                                     }
-                                    if (ConvertTargets.canConvert(item.mime)) {
+                                    if (item.savedUris.size > 1) {
+                                        TextButton(onClick = { showFiles = true }) { Text("${item.savedUris.size} files") }
+                                    } else if (ConvertTargets.canConvert(item.mime)) {
                                         TextButton(onClick = { askConvert = true }) { Text("Convert") }
                                     }
                                     if (item.photoVideo) {
@@ -874,7 +925,7 @@ private fun MakeVideoDialog(current: Int, rememberChoice: Boolean, onDismiss: ()
 /** Ventana para elegir a qué formato convertir un archivo ya descargado. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ConvertDialog(item: DownloadItem, onDismiss: () -> Unit, onConvert: (ConvertTarget) -> Unit) {
+internal fun ConvertDialog(item: DownloadItem, onDismiss: () -> Unit, onConvert: (ConvertTarget) -> Unit) {
     var picked by remember { mutableStateOf<ConvertTarget?>(null) }
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AlertDialog(
@@ -925,7 +976,7 @@ private fun formatDuration(totalSeconds: Int): String? {
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
-private fun openFile(ctx: Context, item: DownloadItem) {
+internal fun openFile(ctx: Context, item: DownloadItem) {
     val uri = Uri.parse(item.savedUri ?: return)
     val intent = Intent(Intent.ACTION_VIEW)
         .setDataAndType(uri, item.mime ?: "video/*")

@@ -160,6 +160,26 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("support_card", true)
         set(v) = sp.edit().putBoolean("support_card", v).apply()
 
+    /** Cuántas descargas van a la vez (1 a 5). */
+    var maxParallel: Int
+        get() = sp.getInt("max_parallel", MAX_PARALLEL).coerceIn(1, MAX_PARALLEL)
+        set(v) = sp.edit().putInt("max_parallel", v.coerceIn(1, MAX_PARALLEL)).apply()
+
+    /** Descargar solo con Wi-Fi (una red sin tarifa). Si no, con datos se avisa antes de una descarga grande. */
+    var wifiOnly: Boolean
+        get() = sp.getBoolean("wifi_only", false)
+        set(v) = sp.edit().putBoolean("wifi_only", v).apply()
+
+    /** Preguntar antes de descargar un enlace con varios archivos. Si es false, se descarga todo sin preguntar. */
+    var askMulti: Boolean
+        get() = sp.getBoolean("ask_multi", true)
+        set(v) = sp.edit().putBoolean("ask_multi", v).apply()
+
+    /** No volver a sugerir quitar la restricción de batería cuando hay una cola larga. */
+    var batteryHintOff: Boolean
+        get() = sp.getBoolean("battery_hint_off", false)
+        set(v) = sp.edit().putBoolean("battery_hint_off", v).apply()
+
     /** Reglas por sitio, en JSON (ver SiteRules.encode). */
     var siteRules: String
         get() = sp.getString("site_rules", "[]") ?: "[]"
@@ -174,4 +194,8 @@ class Prefs(context: Context) {
 
     /** Calidad de lo que se descarga sin preguntar. En modo "preguntar" no hay: se abre la app. */
     fun modeQuality(): Quality? = mode.quality
+
+    companion object {
+        const val MAX_PARALLEL = 5
+    }
 }
