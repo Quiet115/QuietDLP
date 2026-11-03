@@ -31,7 +31,7 @@ object SettingsBackup {
         "palette" to 's', "custom_palettes" to 's', "advanced" to 'b', "folder_name" to 's', "orientation" to 's',
         "support_card" to 'b', "max_parallel" to 'i', "wifi_only" to 'b', "ask_multi" to 'b', "battery_hint_off" to 'b',
         "subs_on" to 'b', "sub_langs" to 's', "sub_mode" to 's', "cover_audio" to 'b', "cover_video" to 'b', "music_names" to 'b', "name_template" to 's', "sponsor_mode" to 's', "sponsor_cats" to 's', "chapter_mode" to 's',
-        "site_rules" to 's',
+        "site_rules" to 's', "follow_wifi" to 'b',
     )
 
     private fun matches(type: Char, v: Any?): Boolean = when (type) {
@@ -42,7 +42,7 @@ object SettingsBackup {
     }
 
     /** Escribe los ajustes conocidos que tengan el tipo esperado y, si se da, el historial (sin lo que está en curso). */
-    fun encode(values: Map<String, *>, history: List<DownloadItem> = emptyList()): String {
+    fun encode(values: Map<String, *>, history: List<DownloadItem> = emptyList(), follows: List<FollowedPage> = emptyList()): String {
         val settings = JSONObject()
         KEYS.forEach { (key, type) ->
             val v = values[key]
@@ -51,6 +51,8 @@ object SettingsBackup {
         val root = JSONObject().put("app", APP).put("format", FORMAT).put("settings", settings)
         val done = history.filterNot { it.isActive }
         if (done.isNotEmpty()) root.put("history", JSONArray(HistoryJson.encode(done)))
+        // Las páginas seguidas van sin lo pendiente ni lo ya visto: al volver a ponerlas se da por visto lo que haya.
+        if (follows.isNotEmpty()) root.put("follows", JSONArray(FollowJson.encode(follows.map { it.copy(pending = emptyList(), lastError = null, counter = 0) })))
         return root.toString(2)
     }
 
@@ -63,6 +65,12 @@ object SettingsBackup {
     fun decodeHistory(json: String): List<DownloadItem> {
         val rows = parse(json)?.optJSONArray("history") ?: return emptyList()
         return HistoryJson.decode(rows.toString())
+    }
+
+    /** Las páginas seguidas del archivo (vacío si no trae). */
+    fun decodeFollows(json: String): List<FollowedPage> {
+        val rows = parse(json)?.optJSONArray("follows") ?: return emptyList()
+        return FollowJson.decode(rows.toString())
     }
 
     /** Los ajustes del archivo que sirven; null si no es una copia de QuietDLP. */

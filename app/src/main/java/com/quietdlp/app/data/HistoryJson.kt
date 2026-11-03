@@ -35,7 +35,9 @@ object HistoryJson {
                     .put("trim", i.trim?.encode())
                     .put("cover", i.cover)
                     .put("sponsor", i.sponsor?.encode())
-                    .put("chapters", i.chapters.id),
+                    .put("chapters", i.chapters.id)
+                    .put("followId", i.followId)
+                    .put("fresh", i.fresh),
             )
         }
         return arr.toString()
@@ -76,6 +78,8 @@ object HistoryJson {
                     cover = o.optBoolean("cover", false),
                     sponsor = SponsorChoice.decode(o.optStringOrNull("sponsor")),
                     chapters = ChapterMode.fromId(o.optStringOrNull("chapters")),
+                    followId = o.optStringOrNull("followId"),
+                    fresh = o.optBoolean("fresh", false),
                 )
             }.getOrNull()
         }

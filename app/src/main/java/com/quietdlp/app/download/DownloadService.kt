@@ -815,7 +815,9 @@ class DownloadService : Service() {
     private fun downloadPhotos(item: DownloadItem, dir: File) {
         setState(item.id, State.PROCESSING, "Downloading photos…")
         notifyProgress(item, "Downloading photos…", -1, force = true)
-        GalleryDl.download(applicationContext, item.id, item.url, dir)
+        // Lo que llega de una galería seguida es el enlace directo de cada archivo.
+        if (item.followId != null && item.quality.kind == Kind.PHOTO) GalleryDl.fetchDirect(item.id, item.url, dir)
+        else GalleryDl.download(applicationContext, item.id, item.url, dir)
     }
 
     /** Si yt-dlp solo bajó audio (típico de una presentación de fotos), comprueba si el enlace tiene imágenes y las baja. */

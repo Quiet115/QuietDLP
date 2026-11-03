@@ -170,6 +170,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("wifi_only", false)
         set(v) = sp.edit().putBoolean("wifi_only", v).apply()
 
+    /** Revisar las páginas seguidas (y bajar lo nuevo) solo con Wi-Fi. */
+    var followWifiOnly: Boolean
+        get() = sp.getBoolean("follow_wifi", true)
+        set(v) = sp.edit().putBoolean("follow_wifi", v).apply()
+
     /** Preguntar antes de descargar un enlace con varios archivos. Si es false, se descarga todo sin preguntar. */
     var askMulti: Boolean
         get() = sp.getBoolean("ask_multi", true)
@@ -209,7 +214,8 @@ class Prefs(context: Context) {
     }
 
     /** Los ajustes (y el historial, si se da) en un texto JSON, para guardarlos en un archivo (ver [SettingsBackup]). */
-    fun exportSettings(history: List<DownloadItem> = emptyList()): String = SettingsBackup.encode(sp.all, history)
+    fun exportSettings(history: List<DownloadItem> = emptyList(), follows: List<FollowedPage> = emptyList()): String =
+        SettingsBackup.encode(sp.all, history, follows)
 
     /** Aplica los ajustes de una copia. Devuelve cuántos puso, o -1 si el texto no es una copia de QuietDLP. */
     fun importSettings(json: String): Int {

@@ -339,6 +339,17 @@ private fun QueueSection(vm: MainViewModel) {
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Followed pages", style = MaterialTheme.typography.titleSmall)
+            Hint(
+                if (vm.followWifiOnly) "Checks and downloads only on Wi-Fi."
+                else "Also checks on mobile data. Battery saver stops checks while the app is closed.",
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QuietChip(vm.followWifiOnly, { vm.changeFollowWifiOnly(true) }, "Wi-Fi only")
+                QuietChip(!vm.followWifiOnly, { vm.changeFollowWifiOnly(false) }, "Wi-Fi and data")
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Links with several files", style = MaterialTheme.typography.titleSmall)
             Hint(if (vm.askMulti) "Asks which ones to download." else "Downloads all of them without asking.")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

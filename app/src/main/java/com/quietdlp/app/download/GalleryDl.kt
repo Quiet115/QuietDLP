@@ -1,6 +1,7 @@
 package com.quietdlp.app.download
 
 import android.content.Context
+import com.quietdlp.app.data.PlaylistEntry
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
@@ -105,6 +106,16 @@ object GalleryDl {
         return out.lines().count { IMAGE_URL.matches(it.trim()) }
     }
 
+    /** Los archivos que lista el enlace (los más nuevos primero), sin descargarlos. Lanza una excepción si no hay ninguno y falló. */
+    fun listFiles(ctx: Context, url: String, max: Int): List<PlaylistEntry> {
+        val (code, out) = exec(ctx, listOf("-g", "--range", "1-$max") + cookiesArgs(ctx) + url)
+        val urls = out.lines().map { it.trim() }.filter { it.startsWith("http") && ' ' !in it }.distinct()
+        if (urls.isEmpty() && code != 0) throw Exception(describeFailure(out, code))
+        return urls.map { u ->
+            PlaylistEntry(u, u.substringBefore('?').substringAfterLast('/').ifBlank { u }, u.takeIf { IMAGE_URL.matches(it) })
+        }
+    }
+
     /** Descarga las fotos del enlace en [dir] y devuelve los archivos. Lanza una excepción si no se obtuvo ninguno. */
     fun download(ctx: Context, id: String, url: String, dir: File): List<File> {
         dir.mkdirs()
@@ -123,6 +134,75 @@ object GalleryDl {
 
     fun cancel(id: String) {
         running[id]?.destroy()
+        direct[id]?.set(true)
+    }
+
+    private val direct = ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicBoolean>()
+    private const val DIRECT_MAX_BYTES = 500L * 1024 * 1024
+
+    private val EXT_BY_TYPE = mapOf(
+        "image/jpeg" to "jpg", "image/png" to "png", "image/gif" to "gif", "image/webp" to "webp", "image/avif" to "avif",
+        "video/mp4" to "mp4", "video/webm" to "webm", "video/quicktime" to "mov",
+    )
+    private val KNOWN_EXT = setOf("jpg", "jpeg", "png", "gif", "webp", "avif", "heic", "mp4", "webm", "mov", "mkv", "m4v")
+
+    /**
+     * Baja un archivo por su enlace directo. Las galerías que se siguen dan el enlace de cada archivo y algunas webs lo dan
+     * sin extensión, que gallery-dl no acepta: aquí se baja tal cual (con la web de origen como referencia, como hace un
+     * navegador) y la extensión sale del tipo que declara el servidor.
+     */
+    fun fetchDirect(id: String, url: String, dir: File): File {
+        require(url.startsWith("https://")) { "ERROR: only https links can be downloaded" }
+        dir.mkdirs()
+        val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+        direct[id] = cancelled
+        try {
+            var current = url
+            repeat(5) {
+                val c = URL(current).openConnection() as HttpURLConnection
+                c.instanceFollowRedirects = false
+                c.connectTimeout = 15_000
+                c.readTimeout = 30_000
+                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) QuietDLP")
+                c.setRequestProperty("Referer", URL(current).let { "${it.protocol}://${it.host}/" })
+                try {
+                    val code = c.responseCode
+                    if (code in 300..399) {
+                        current = URL(URL(current), c.getHeaderField("Location") ?: error("ERROR: bad redirect")).toString()
+                        require(current.startsWith("https://")) { "ERROR: redirect to a non-https link" }
+                        return@repeat
+                    }
+                    require(code == 200) { "ERROR: couldn't download the file (HTTP $code)" }
+                    val type = c.contentType?.substringBefore(';')?.trim()?.lowercase()
+                    val raw = current.substringBefore('?').substringAfterLast('/').ifBlank { "file" }
+                    val fromUrl = raw.substringAfterLast('.', "").lowercase().takeIf { it in KNOWN_EXT }
+                    val ext = fromUrl ?: EXT_BY_TYPE[type] ?: error("ERROR: not a photo or video file")
+                    val base = (if (fromUrl != null) raw.substringBeforeLast('.') else raw).replace(Regex("""[^\w.\- ]"""), "_").take(80).ifBlank { "file" }
+                    val out = File(dir, "$base.$ext")
+                    var total = 0L
+                    c.inputStream.use { input ->
+                        out.outputStream().use { o ->
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                if (cancelled.get()) error("ERROR: canceled")
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                total += n
+                                require(total <= DIRECT_MAX_BYTES) { "ERROR: file too big" }
+                                o.write(buf, 0, n)
+                            }
+                        }
+                    }
+                    require(total > 0) { "ERROR: empty file" }
+                    return out
+                } finally {
+                    c.disconnect()
+                }
+            }
+            error("ERROR: too many redirects")
+        } finally {
+            direct.remove(id)
+        }
     }
 
     /** Convierte la salida de gallery-dl en un mensaje que [Errors] sepa clasificar (p. ej. "falta iniciar sesión"). */

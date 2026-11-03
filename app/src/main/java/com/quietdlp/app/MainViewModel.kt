@@ -10,6 +10,14 @@ import android.widget.Toast
 import com.quietdlp.app.data.AppOrientation
 import com.quietdlp.app.data.PlaylistEntry
 import com.quietdlp.app.data.PlaylistInfo
+import com.quietdlp.app.data.FollowEngine
+import com.quietdlp.app.data.FollowInterval
+import com.quietdlp.app.data.FollowUrl
+import com.quietdlp.app.data.FollowedPage
+import com.quietdlp.app.download.FollowChecker
+import com.quietdlp.app.download.FollowProbe
+import com.quietdlp.app.download.FollowScheduler
+import com.quietdlp.app.download.FollowStore
 import com.quietdlp.app.data.PlaylistProbe
 import com.quietdlp.app.data.State
 import com.quietdlp.app.download.Connectivity
@@ -31,6 +39,7 @@ import com.quietdlp.app.download.DownloadIndex
 import com.quietdlp.app.download.MediaFiles
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -627,6 +636,148 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         showUpdateNotice = false
     }
 
+    // ── Páginas seguidas ──
+
+    var followWifiOnly by mutableStateOf(prefs.followWifiOnly)
+        private set
+
+    fun changeFollowWifiOnly(v: Boolean) {
+        followWifiOnly = v
+        prefs.followWifiOnly = v
+        FollowScheduler.update(app)
+    }
+
+    /** Lo que se escribe en el cuadro de seguir una página. */
+    var followUrl by mutableStateOf("")
+
+    var followProbing by mutableStateOf(false)
+        private set
+
+    var followError by mutableStateOf<String?>(null)
+        private set
+
+    /** La página que se acaba de mirar, a la espera de que el usuario elija cómo seguirla. */
+    var followSetup by mutableStateOf<FollowProbe?>(null)
+        private set
+    private var followSetupUrl = ""
+
+    /** Las páginas que se están revisando ahora mismo. */
+    val followChecking = mutableStateListOf<String>()
+
+    private val followRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    fun startFollow() {
+        val u = UrlUtils.extract(followUrl)?.let(FollowUrl::normalize)
+        if (u == null) {
+            followError = "That's not a link."
+            return
+        }
+        if (FollowStore.pages.value.any { it.url == u }) {
+            followError = "You already follow this page."
+            return
+        }
+        followError = null
+        followProbing = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val probe = FollowChecker.probe(app, u)
+                followSetupUrl = u
+                followSetup = probe
+            } catch (t: Throwable) {
+                followError = Errors.friendly(t)
+            } finally {
+                followProbing = false
+            }
+        }
+    }
+
+    fun dismissFollowSetup() {
+        followSetup = null
+    }
+
+    fun confirmFollow(kind: Kind, level: QualityLevel, auto: Boolean, days: Double, latest: Int, includeDuplicates: Boolean) {
+        val probe = followSetup ?: return
+        followSetup = null
+        followUrl = ""
+        val page = FollowedPage(
+            id = UUID.randomUUID().toString().take(8),
+            url = followSetupUrl,
+            title = probe.title,
+            thumbnail = probe.thumbnail,
+            engine = probe.engine,
+            quality = level.quality(kind),
+            auto = auto,
+            days = FollowInterval.clamp(days),
+            lastCheck = System.currentTimeMillis(),
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            FollowStore.add(page)
+            // Lo que ya hay se da por visto: solo se baja lo que salga desde ahora (y lo que se pida abajo).
+            FollowChecker.markAllSeen(page.id, probe.entries)
+            FollowScheduler.update(app)
+            if (latest > 0) {
+                FollowStore.update(page.id) { it.copy(pending = probe.entries.take(latest)) }
+                FollowChecker.release(app, page.id, includeDuplicates)
+            }
+        }
+    }
+
+    fun checkNow(id: String) {
+        if (id in followChecking) return
+        followChecking.add(id)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                FollowChecker.check(app, id)
+                if (FollowStore.get(id)?.let { it.auto && it.pending.isNotEmpty() } == true) FollowChecker.release(app, id)
+            } finally {
+                followChecking.remove(id)
+            }
+        }
+    }
+
+    /** Baja las novedades que estaban esperando (páginas que solo avisan). */
+    fun downloadPending(id: String) {
+        viewModelScope.launch(Dispatchers.IO) { FollowChecker.release(app, id) }
+    }
+
+    fun setFollowAuto(id: String, auto: Boolean) {
+        FollowStore.update(id) { it.copy(auto = auto) }
+        if (auto) viewModelScope.launch(Dispatchers.IO) { FollowChecker.release(app, id) }
+    }
+
+    fun setFollowDays(id: String, days: Double) {
+        FollowStore.update(id) { it.copy(days = FollowInterval.clamp(days)) }
+        FollowScheduler.update(app)
+    }
+
+    fun removeFollow(id: String) {
+        FollowStore.remove(id)
+        DownloadRepository.clearFresh(id)
+        FollowScheduler.update(app)
+    }
+
+    /** El usuario abrió lo que llegó de la página: ya no es nuevo. */
+    fun markFollowSeen(id: String) {
+        DownloadRepository.clearFresh(id)
+    }
+
+    /** Al abrir la app: revisar lo que toca y bajar lo que quedó esperando (en primer plano Android sí deja arrancar). */
+    fun followAppOpened() {
+        if (FollowStore.pages.value.isEmpty() || !followRunning.compareAndSet(false, true)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                FollowChecker.runDue(app)
+            } finally {
+                followRunning.set(false)
+            }
+        }
+    }
+
+    init {
+        FollowStore.init(app)
+        FollowScheduler.update(app)
+    }
+
     init {
         refreshAccounts()
         viewModelScope.launch {
@@ -1210,7 +1361,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             backupMessage = withContext(Dispatchers.IO) {
                 runCatching {
-                    app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(prefs.exportSettings(DownloadRepository.items.value).toByteArray()) }
+                    app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(prefs.exportSettings(DownloadRepository.items.value, FollowStore.pages.value).toByteArray()) }
                         ?: error("Couldn't write the file")
                     "Backup saved."
                 }.getOrElse { "Couldn't save: ${it.message}" }
@@ -1231,6 +1382,20 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         return out.toByteArray()
     }
 
+    /** Vuelve a seguir las páginas de la copia que aún no se siguen. Lo que ya hay en ellas cuenta como visto. */
+    private fun restoreFollows(restored: List<FollowedPage>): Int {
+        val now = System.currentTimeMillis()
+        var added = 0
+        for (p in restored) {
+            if (FollowStore.pages.value.any { it.url == p.url }) continue
+            val id = if (FollowStore.get(p.id) == null) p.id else UUID.randomUUID().toString().take(8)
+            FollowStore.add(p.copy(id = id, lastCheck = now, pending = emptyList(), lastError = null, counter = 0))
+            added++
+        }
+        if (added > 0) FollowScheduler.update(app)
+        return added
+    }
+
     fun restoreSettingsFrom(uri: Uri) {
         viewModelScope.launch {
             backupMessage = withContext(Dispatchers.IO) {
@@ -1242,9 +1407,11 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     val n = prefs.importSettings(text)
                     if (n < 0) return@runCatching "That isn't a QuietDLP backup."
                     val rows = DownloadRepository.mergeHistory(app, SettingsBackup.decodeHistory(text))
+                    val pages = restoreFollows(SettingsBackup.decodeFollows(text))
                     buildString {
                         append("Restored $n settings")
                         if (rows > 0) append(" and $rows history ${if (rows == 1) "item" else "items"}")
+                        if (pages > 0) append(" and $pages followed ${if (pages == 1) "page" else "pages"}")
                         append(". Close the app and open it again to apply the settings.")
                     }
                 }.getOrElse { "Couldn't restore: ${it.message}" }

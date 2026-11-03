@@ -25,6 +25,16 @@ object PlaylistProbe {
         if (root.optString("_type") != "playlist") return null
         val arr = root.optJSONArray("entries") ?: return null
 
+        val entries = entriesOf(arr)
+        if (entries.size < 2) return null
+        val source = pageOf(sourceUrl)
+        if (entries.all { pageOf(it.url) == source }) return null
+
+        val title = root.optString("title").takeIf { it.isNotBlank() && it != "null" } ?: "Playlist"
+        return PlaylistInfo(title, entries)
+    }
+
+    private fun entriesOf(arr: org.json.JSONArray): List<PlaylistEntry> {
         val seen = LinkedHashSet<String>()
         val entries = ArrayList<PlaylistEntry>()
         for (n in 0 until arr.length()) {
@@ -34,12 +44,22 @@ object PlaylistProbe {
             val title = o.optString("title").takeIf { it.isNotBlank() && it != "null" } ?: url
             entries += PlaylistEntry(url, title, thumbnailOf(o))
         }
-        if (entries.size < 2) return null
-        val source = pageOf(sourceUrl)
-        if (entries.all { pageOf(it.url) == source }) return null
+        return entries
+    }
 
-        val title = root.optString("title").takeIf { it.isNotBlank() && it != "null" } ?: "Playlist"
-        return PlaylistInfo(title, entries)
+    /**
+     * Para seguir una página: la lista tal cual está (puede tener 0 o 1 elementos y repetirse la misma página).
+     * null si el enlace no es una lista (por ejemplo, un solo vídeo).
+     */
+    fun parseForFollow(json: String): PlaylistInfo? {
+        val start = json.indexOf('{')
+        if (start < 0) return null
+        val root = runCatching { JSONObject(json.substring(start)) }.getOrNull() ?: return null
+        if (root.optString("_type") != "playlist") return null
+        val arr = root.optJSONArray("entries") ?: return null
+        val title = root.optString("title").takeIf { it.isNotBlank() && it != "null" }
+            ?: root.optString("uploader").takeIf { it.isNotBlank() && it != "null" } ?: "Playlist"
+        return PlaylistInfo(title, entriesOf(arr))
     }
 
     private fun thumbnailOf(o: JSONObject): String? {

@@ -131,6 +131,7 @@ fun GroupCard(
                         group.done == group.total -> StatusPill("Done", Tone.GOOD)
                         else -> StatusPill("Stopped", Tone.NEUTRAL)
                     }
+                    if (group.items.any { it.fresh }) StatusPill("New", Tone.NEW)
                     Text(
                         groupSummary(group),
                         style = MaterialTheme.typography.bodySmall,

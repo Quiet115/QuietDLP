@@ -84,6 +84,25 @@ object DownloadRepository {
         save()
     }
 
+    /** Quita varias a la vez (por ejemplo, las que no se pudieron poner en la cola). */
+    fun removeAll(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        _items.update { list -> list.filterNot { it.id in ids } }
+        save()
+    }
+
+    /** El usuario ya vio lo que llegó de una página seguida (de todas si [followId] es null). */
+    fun clearFresh(followId: String?) {
+        var changed = false
+        _items.update { list ->
+            changed = false
+            list.map {
+                if (it.fresh && (followId == null || it.followId == followId)) { changed = true; it.copy(fresh = false) } else it
+            }
+        }
+        if (changed) save()
+    }
+
     fun clearFinished() {
         _items.update { list -> list.filter { it.isActive } }
         save()

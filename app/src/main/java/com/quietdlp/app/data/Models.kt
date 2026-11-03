@@ -75,6 +75,10 @@ data class DownloadItem(
     val sponsor: SponsorChoice? = null,
     /** Qué hacer con los capítulos del vídeo. */
     val chapters: ChapterMode = ChapterMode.OFF,
+    /** La página seguida de la que salió (null = la pegó el usuario). */
+    val followId: String? = null,
+    /** Llegó sola de una página seguida y el usuario aún no la ha visto. */
+    val fresh: Boolean = false,
 ) {
     val savedUri: String? get() = savedUris.firstOrNull()
 

@@ -137,7 +137,7 @@ fun SectionCard(title: String, modifier: Modifier = Modifier, content: @Composab
     }
 }
 
-enum class Tone { NEUTRAL, GOOD, BAD, ACTIVE }
+enum class Tone { NEUTRAL, GOOD, BAD, ACTIVE, NEW }
 
 /** Etiqueta pequeña de estado ("Done", "Failed"…). */
 @Composable
@@ -148,6 +148,7 @@ fun StatusPill(text: String, tone: Tone) {
         Tone.BAD -> scheme.error.copy(alpha = 0.16f) to scheme.error
         Tone.ACTIVE -> scheme.secondaryContainer to scheme.onSecondaryContainer
         Tone.NEUTRAL -> scheme.surfaceVariant to scheme.onSurfaceVariant
+        Tone.NEW -> Color(0xFFFFC21A) to Color(0xFF3A2A00)
     }
     Box(Modifier.clip(CircleShape).background(bg).padding(horizontal = 9.dp, vertical = 3.dp)) {
         Text(text, style = MaterialTheme.typography.labelSmall, color = fg, maxLines = 1, overflow = TextOverflow.Ellipsis)

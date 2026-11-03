@@ -63,7 +63,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -114,6 +117,7 @@ import com.quietdlp.app.data.Slideshow
 import com.quietdlp.app.data.State
 import com.quietdlp.app.data.resolutionName
 import com.quietdlp.app.download.DownloadRepository
+import com.quietdlp.app.download.FollowStore
 import com.quietdlp.app.download.UrlUtils
 import com.quietdlp.app.update.AppUpdater
 
@@ -123,6 +127,9 @@ fun MainScreen(vm: MainViewModel) {
     val ctx = LocalContext.current
     val downloads by DownloadRepository.items.collectAsStateWithLifecycle()
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var tab by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(0) }
+    val followPages by FollowStore.pages.collectAsStateWithLifecycle()
+    val withNew = followPagesWithNew(followPages, downloads)
     val visible = HistoryFilter.filter(downloads, vm.searchQuery)
     val rows = HistoryGroups.rows(visible)
     // El grupo abierto en pantalla completa (se busca en la lista cada vez: sus archivos van cambiando).
@@ -132,7 +139,10 @@ fun MainScreen(vm: MainViewModel) {
     BackHandler(enabled = selecting && !showSettings && openRow == null) { vm.clearSelection() }
 
     // Al volver de la pantalla de inicio de sesión, refrescar qué cuentas hay guardadas.
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshAccounts() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        vm.refreshAccounts()
+        vm.followAppOpened()
+    }
 
     // Permisos: notificaciones (Android 13+) y almacenamiento (solo Android 9 o anterior).
     val permLauncher = rememberLauncherForActivityResult(
@@ -157,9 +167,34 @@ fun MainScreen(vm: MainViewModel) {
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
-            topBar = { MainTopBar(vm) { showSettings = true } },
+            topBar = {
+                Column {
+                    MainTopBar(vm) { showSettings = true }
+                    TabRow(selectedTabIndex = tab) {
+                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Downloads") })
+                        Tab(
+                            selected = tab == 1,
+                            onClick = { tab = 1 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("Following")
+                                    if (withNew > 0) Badge { Text("$withNew") }
+                                }
+                            },
+                        )
+                    }
+                }
+            },
         ) { pad ->
-            BoxWithConstraints(Modifier.padding(pad).fillMaxSize()) {
+            if (tab == 1) {
+                Box(Modifier.padding(pad).fillMaxSize()) {
+                    FollowingTab(vm, followPages, downloads) { gid ->
+                        tab = 0
+                        openGroup = gid
+                        vm.markFollowSeen(gid.removePrefix("follow-"))
+                    }
+                }
+            } else BoxWithConstraints(Modifier.padding(pad).fillMaxSize()) {
                 if (Layouts.twoColumns(maxWidth.value.toInt())) {
                     // Pantalla ancha (horizontal, tableta, plegable): a la izquierda el enlace, a la derecha las descargas.
                     Row(Modifier.fillMaxSize()) {
@@ -172,7 +207,7 @@ fun MainScreen(vm: MainViewModel) {
                             Modifier.weight(0.58f).fillMaxHeight(),
                             contentPadding = PaddingValues(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 32.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
-                        ) { historySection(vm, rows, visible, selecting) { openGroup = it } }
+                        ) { historySection(vm, rows, visible, selecting) { openGroup = it; seenFollow(vm, it) } }
                     }
                 } else {
                     // Una columna, centrada y con un ancho máximo para que no se estire.
@@ -184,7 +219,7 @@ fun MainScreen(vm: MainViewModel) {
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                         ) {
                             inputSection(vm)
-                            historySection(vm, rows, visible, selecting) { openGroup = it }
+                            historySection(vm, rows, visible, selecting) { openGroup = it; seenFollow(vm, it) }
                         }
                     }
                 }
@@ -211,6 +246,11 @@ fun MainScreen(vm: MainViewModel) {
     vm.dataPrompt?.let { DataPromptDialog(vm) }
     if (vm.batteryPrompt) BatteryPromptDialog(vm)
     if (vm.showAppUpdate) vm.appUpdate?.let { AppUpdateDialog(vm, it) }
+}
+
+/** Abrir el grupo de una página seguida es verlo: deja de ser nuevo. */
+private fun seenFollow(vm: MainViewModel, groupId: String) {
+    if (groupId.startsWith("follow-")) vm.markFollowSeen(groupId.removePrefix("follow-"))
 }
 
 /** Parte de arriba: estado del motor, enlace copiado, cuadro del enlace, análisis y tarjeta de apoyo. */
@@ -785,6 +825,7 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                     Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatusPill(statusLabel(item), statusTone(item))
+                        if (item.fresh) StatusPill("New", Tone.NEW)
                         Text(
                             item.quality.label(),
                             style = MaterialTheme.typography.bodySmall,
