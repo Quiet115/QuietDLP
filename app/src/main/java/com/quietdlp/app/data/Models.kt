@@ -65,6 +65,16 @@ data class DownloadItem(
     val groupTitle: String? = null,
     /** Esperar a tener Wi-Fi (una red sin tarifa) antes de empezar. */
     val wifiOnly: Boolean = false,
+    /** Subtítulos pedidos para este vídeo (null = ninguno). */
+    val subs: SubtitleChoice? = null,
+    /** Solo se baja este trozo (null = el archivo entero). */
+    val trim: TrimRange? = null,
+    /** Con la miniatura metida dentro del archivo como portada. */
+    val cover: Boolean = false,
+    /** SponsorBlock: qué hacer con las partes marcadas por la gente (null = nada). */
+    val sponsor: SponsorChoice? = null,
+    /** Qué hacer con los capítulos del vídeo. */
+    val chapters: ChapterMode = ChapterMode.OFF,
 ) {
     val savedUri: String? get() = savedUris.firstOrNull()
 

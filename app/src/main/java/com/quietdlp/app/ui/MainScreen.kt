@@ -98,6 +98,9 @@ import com.quietdlp.app.Sharing
 import com.quietdlp.app.data.AudioOptions
 import com.quietdlp.app.data.ConvertTarget
 import com.quietdlp.app.data.ConvertTargets
+import com.quietdlp.app.data.CoverOptions
+import com.quietdlp.app.data.SponsorChoice
+import com.quietdlp.app.download.Errors
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.DownloadMode
 import com.quietdlp.app.data.HistoryFilter
@@ -681,6 +684,22 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                     } else {
                         AudioFormatPicker(vm)
                     }
+                    // Recortar vale para vídeo y audio, pero no para listas, fotos ni directos.
+                    if (vm.canTrim(info)) TrimSection(vm, info)
+                    // La portada vale para vídeo y audio (menos WAV, que no puede llevar imagen).
+                    if (CoverOptions.available(vm.kind, vm.audioFormat)) CoverSection(vm)
+                    // Los subtítulos son de vídeo, y una lista (que trae varios vídeos) no los ofrece.
+                    if (vm.kind == Kind.VIDEO && info.playlistCount == 0) SubtitlesSection(vm, info)
+                    // Modo Avanzado: SponsorBlock (YouTube) y capítulos. Con un trozo no se ofrecen.
+                    if (vm.canSponsor(info)) SponsorSection(vm)
+                    if (vm.canChapters(info)) ChaptersSection(vm)
+                    if (vm.advanced && vm.trimOn && (SponsorChoice.supports(info.url) || info.chapterCount > 0)) {
+                        Text(
+                            "SponsorBlock and chapters aren't available when trimming.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 Button(onClick = vm::download, modifier = Modifier.fillMaxWidth().height(50.dp)) {
@@ -775,6 +794,8 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                     }
                     if (item.state == State.FAILED && !item.message.isNullOrBlank()) {
                         Text(item.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    } else if (item.state == State.DONE && !item.message.isNullOrBlank()) {
+                        Text(item.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
 
                     when (item.state) {
@@ -830,6 +851,12 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                                             ),
                                         )
                                     }) { Text("Sign in") }
+                                }
+                                if (item.state == State.FAILED && Errors.needsEngineUpdate(item.message)) {
+                                    // Lo más probable es un yt-dlp viejo: se actualiza y se reintenta de una vez.
+                                    Button(onClick = { vm.updateEngine { vm.retry(item) } }, enabled = !vm.updating) {
+                                        Text(if (vm.updating) "Updating…" else "Update engine")
+                                    }
                                 }
                                 if (!item.isConversion) OutlinedButton(onClick = { vm.retry(item) }) { Text("Retry") }
                                 IconButton(onClick = { vm.remove(item.id) }) {

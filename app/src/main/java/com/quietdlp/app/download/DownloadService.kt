@@ -27,14 +27,24 @@ import com.quietdlp.app.data.CONVERT_URL_PREFIX
 import com.quietdlp.app.data.ConcurrencyGate
 import com.quietdlp.app.data.HistoryGroups
 import com.quietdlp.app.data.ConvertTarget
+import com.quietdlp.app.data.ChapterMode
+import com.quietdlp.app.data.ChapterOptions
 import com.quietdlp.app.data.ConvertTargets
+import com.quietdlp.app.data.CoverOptions
 import com.quietdlp.app.data.DownloadItem
+import com.quietdlp.app.data.FileNameTemplate
 import com.quietdlp.app.data.FreeSpace
 import com.quietdlp.app.data.Kind
+import com.quietdlp.app.data.MusicNaming
 import com.quietdlp.app.data.Prefs
 import com.quietdlp.app.data.Quality
 import com.quietdlp.app.data.Slideshow
+import com.quietdlp.app.data.SponsorChoice
 import com.quietdlp.app.data.State
+import com.quietdlp.app.data.SubtitleChoice
+import com.quietdlp.app.data.SubtitleMode
+import com.quietdlp.app.data.SubtitleOptions
+import com.quietdlp.app.data.TrimRange
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CancellationException
@@ -67,6 +77,11 @@ class DownloadService : Service() {
         private const val ACTION_CANCEL_ALL = "com.quietdlp.app.CANCEL_ALL"
         private const val EXTRA_IDS = "ids"
         private const val EXTRA_WIFI_ONLY = "wifi_only"
+        private const val EXTRA_SUBS = "subs"
+        private const val EXTRA_TRIM = "trim"
+        private const val EXTRA_COVER = "cover"
+        private const val EXTRA_SPONSOR = "sponsor"
+        private const val EXTRA_CHAPTERS = "chapters"
         private const val EXTRA_SRC_URI = "src_uri"
         private const val EXTRA_SRC_MIME = "src_mime"
         private const val EXTRA_TARGET = "target"
@@ -95,10 +110,20 @@ class DownloadService : Service() {
             title: String? = null,
             thumbnail: String? = null,
             wifiOnly: Boolean = false,
+            subs: SubtitleChoice? = null,
+            trim: TrimRange? = null,
+            cover: Boolean? = null,
+            sponsor: SponsorChoice? = null,
+            chapters: ChapterMode = ChapterMode.OFF,
         ) {
             val i = Intent(ctx, DownloadService::class.java)
                 .setAction(ACTION_ENQUEUE)
                 .putExtra(EXTRA_WIFI_ONLY, wifiOnly)
+                .putExtra(EXTRA_SUBS, subs?.encode())
+                .putExtra(EXTRA_TRIM, trim?.encode())
+                .apply { if (cover != null) putExtra(EXTRA_COVER, cover) }
+                .putExtra(EXTRA_SPONSOR, sponsor?.encode())
+                .putExtra(EXTRA_CHAPTERS, chapters.id)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_TITLE, title)
                 .putExtra(EXTRA_THUMB, thumbnail)
@@ -178,6 +203,13 @@ class DownloadService : Service() {
     /** Descargas que ya salieron de la cola y están en marcha (ver [HistoryGroups.mustWait]). */
     private val started = ConcurrentHashMap.newKeySet<String>()
 
+    /** Descargas a las que yt-dlp ya les metió los subtítulos dentro del vídeo. */
+    private val embeddedSubs = ConcurrentHashMap.newKeySet<String>()
+
+    /** Lo mismo con la portada, y las que se repiten sin portada porque meterla falló. */
+    private val embeddedCover = ConcurrentHashMap.newKeySet<String>()
+    private val coverOff = ConcurrentHashMap.newKeySet<String>()
+
     /** Ids puestos en la cola por [handleRequeue] que aún no salieron de ella. */
     private val queuedIds = ConcurrentHashMap.newKeySet<String>()
 
@@ -217,6 +249,9 @@ class DownloadService : Service() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "QuietDLP:download")
             .apply { acquire(WAKE_LOCK_MS) }
+
+        // Lo que dejó una descarga interrumpida (el sistema cerró la app): al arrancar el servicio no hay ninguna en marcha.
+        listOf("dl", "cv").forEach { File(cacheDir, it).deleteRecursively() }
 
         gate = ConcurrencyGate(prefs.maxParallel)
         // Varios trabajadores sacan de la misma cola en orden. Cada uno pide su hueco ANTES de sacar la siguiente,
@@ -291,6 +326,12 @@ class DownloadService : Service() {
             thumbnail = intent.getStringExtra(EXTRA_THUMB),
             quality = quality,
             wifiOnly = intent.getBooleanExtra(EXTRA_WIFI_ONLY, false),
+            subs = SubtitleChoice.decode(intent.getStringExtra(EXTRA_SUBS)),
+            trim = TrimRange.decode(intent.getStringExtra(EXTRA_TRIM)),
+            // Sin pedirlo (Compartir, enlaces copiados) vale lo que diga Ajustes.
+            cover = if (intent.hasExtra(EXTRA_COVER)) intent.getBooleanExtra(EXTRA_COVER, false) else prefs.coverFor(kind),
+            sponsor = SponsorChoice.decode(intent.getStringExtra(EXTRA_SPONSOR)),
+            chapters = ChapterMode.fromId(intent.getStringExtra(EXTRA_CHAPTERS)),
         )
         DownloadRepository.add(item)
         pending.incrementAndGet()
@@ -631,6 +672,8 @@ class DownloadService : Service() {
     /** Una pasada completa: preparar, descargar y guardar. Lanza si falla. */
     private suspend fun attempt(item: DownloadItem, tmp: File) {
         val id = item.id
+        embeddedSubs -= id
+        embeddedCover -= id
         setState(id, State.PREPARING, "Getting ready…")
         notifyProgress(item, "Getting ready…", -1, force = true)
 
@@ -653,6 +696,12 @@ class DownloadService : Service() {
                     throw e
                 } catch (e: Exception) {
                     if (id in cancelled) throw e
+                    // La portada es un extra: si no se puede meter, se repite la descarga sin ella.
+                    if (item.cover && id !in coverOff && Errors.isCoverProblem(e)) {
+                        coverOff += id
+                        tmp.listFiles()?.forEach { it.deleteRecursively() }
+                        continue
+                    }
                     // Sin vídeo (publicación de fotos, galería, web desconocida): probar con gallery-dl.
                     if (prefs.photosEnabled && Errors.isNoVideo(e)) {
                         tmp.listFiles()?.forEach { it.deleteRecursively() }
@@ -685,10 +734,16 @@ class DownloadService : Service() {
         setState(id, State.PROCESSING, "Saving…")
         // Una publicación con varios vídeos (p. ej. un carrusel) genera varios archivos:
         // se guardan todos, no solo el más grande.
-        val found = tmp.listFiles()
+        val all = tmp.listFiles()
             ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") }
             ?.sortedBy { it.name }
             .orEmpty()
+        // Los subtítulos que quedan sueltos (cuando se pidieron aparte) no son el archivo principal: se guardan junto a él.
+        val subFiles = all.filter { it.extension.lowercase() in SubtitleOptions.FILE_EXTENSIONS }
+        val whole = all - subFiles.toSet()
+        // Dividido por capítulos: se guardan los capítulos y no el vídeo entero.
+        val chapterFiles = whole.filter { ChapterOptions.isChapterFile(it.name) }
+        val found = if (item.chapters == ChapterMode.SPLIT && chapterFiles.size >= 2) chapterFiles else whole
         if (found.isEmpty()) error("yt-dlp finished but produced no file")
 
         // Una publicación de fotos puede traer también su canción (Instagram): se reconoce aunque se llame ".mp4"
@@ -700,7 +755,18 @@ class DownloadService : Service() {
         } else found
         val photoVideo = hasPhotos && files.any { !MediaKinds.isImage(it) && MediaKinds.isAudioOnly(it) }
 
-        val savedAll = files.map { MediaSaver.publish(applicationContext, it) }
+        val wanted = item.subs?.takeIf { it.codes.isNotEmpty() && item.trim == null }
+        // Vídeo y .srt van juntos, en la misma carpeta, para que los reproductores los emparejen.
+        val together = wanted?.mode == SubtitleMode.SEPARATE && subFiles.isNotEmpty()
+        val savedAll = files.map { MediaSaver.publish(applicationContext, it, together) }
+        if (together) subFiles.forEach { runCatching { MediaSaver.publish(applicationContext, it, together = true) } }
+        val noSubs = wanted != null &&
+            if (wanted.mode == SubtitleMode.SEPARATE) subFiles.isEmpty() else id !in embeddedSubs
+        embeddedSubs -= id
+        val noCover = item.cover && !hasPhotos && CoverOptions.available(item.quality.kind, item.quality.audioFormat) &&
+            id !in embeddedCover
+        embeddedCover -= id
+        coverOff -= id
         val saved = savedAll.first()
         val title = Errors.cleanTitle(files.first()) +
             if (files.size > 1) " (+${files.size - 1} more)" else ""
@@ -709,7 +775,7 @@ class DownloadService : Service() {
                 state = State.DONE,
                 progress = 100f,
                 title = title,
-                message = null,
+                message = missingExtras(noSubs, noCover),
                 savedUris = savedAll.map { it.uri.toString() },
                 mime = saved.mime,
                 photoVideo = photoVideo,
@@ -718,6 +784,14 @@ class DownloadService : Service() {
         DownloadIndex.record(applicationContext, item.url, item.quality.kind, savedAll.map { it.uri.toString() })
         if (item.groupId == null) notifyResult(id, title, ok = true, saved = saved, shareUris = savedAll.map { it.uri })
         if (photoVideo && prefs.autoPhotoVideo) DownloadRepository.get(id)?.let { enqueueSlideshow(it) }
+    }
+
+    /** El aviso de lo que se pidió y no se pudo meter en el archivo (null si todo salió). */
+    private fun missingExtras(noSubs: Boolean, noCover: Boolean): String? = when {
+        noSubs && noCover -> "Saved without subtitles or cover image."
+        noSubs -> "Saved without subtitles."
+        noCover -> "Saved without cover image."
+        else -> null
     }
 
     /** Espera a que haya internet (hasta 30 min). false = se canceló o se agotó el tiempo. */
@@ -757,7 +831,14 @@ class DownloadService : Service() {
     private fun buildRequest(item: DownloadItem, dir: File): YoutubeDLRequest {
         val r = YoutubeDLRequest(item.url)
         // El índice solo aparece en publicaciones con varios vídeos, para que no se pisen entre sí.
-        r.addOption("-o", "${dir.absolutePath}/%(title).100B%(playlist_index& - {}|)s.%(ext)s")
+        // Un trozo lleva su tiempo en el nombre, para que no pise la descarga completa.
+        val part = item.trim?.fileLabel().orEmpty()
+        // La música se llama "Artista - Título" y lleva esos datos dentro; el resto, el título del vídeo.
+        val musicNames = item.quality.kind == Kind.AUDIO && prefs.musicNames
+        val nameBase = FileNameTemplate.toYtDlp(prefs.nameTemplate)
+        val template = if (musicNames) MusicNaming.fileTemplate(part) else "$nameBase$part%(playlist_index& - {}|)s.%(ext)s"
+        r.addOption("-o", "${dir.absolutePath}/$template")
+        if (musicNames) r.addCommands(MusicNaming.arguments())
         r.addOption("--no-playlist")
         r.addOption("--no-mtime")
         r.addOption("--windows-filenames")
@@ -765,6 +846,23 @@ class DownloadService : Service() {
         r.addOption("--concurrent-fragments", 4)
         // Sesiones guardadas por el usuario. yt-dlp solo envía cada cookie a su propio sitio.
         CookieStore.mergedPath(applicationContext)?.let { r.addOption("--cookies", it) }
+
+        // Solo se baja ese trozo. El corte exacto es obligatorio: sin él, el audio salía del doble de largo.
+        item.trim?.let { t ->
+            r.addOption("--download-sections", t.section())
+            r.addOption("--force-keyframes-at-cuts")
+        }
+        // Los subtítulos no se recortan con el vídeo (salen desfasados): con un trozo no se piden.
+        val subs = item.subs.takeIf { item.trim == null }
+        // SponsorBlock y capítulos no se mezclan con un trozo: sus tiempos son los del vídeo entero.
+        if (item.trim == null && item.quality.kind != Kind.PHOTO) {
+            r.addCommands(ChapterOptions.arguments(item.sponsor, item.chapters, dir.absolutePath))
+        }
+        if (item.cover && item.id !in coverOff) {
+            CoverOptions.ytDlpOptions(item.quality.kind, item.quality.audioFormat).forEach { (name, value) ->
+                if (value == null) r.addOption(name) else r.addOption(name, value)
+            }
+        }
 
         val q = item.quality
         if (q.kind == Kind.VIDEO) {
@@ -774,7 +872,13 @@ class DownloadService : Service() {
             // Resolución primero (con tope si se pidió); a igualdad, preferir h264/aac (compatible con todos los móviles).
             val res = if (q.maxHeight > 0) "res:${q.maxHeight}" else "res"
             r.addOption("-S", "$res,vcodec:h264,acodec:m4a")
-            r.addOption("--merge-output-format", "mp4")
+            // Con subtítulos en un MKV el vídeo final cambia de contenedor (también si el sitio da un solo archivo).
+            val container = SubtitleOptions.container(subs)
+            r.addOption("--merge-output-format", container)
+            if (container != "mp4") r.addOption("--remux-video", container)
+            SubtitleOptions.ytDlpOptions(subs).forEach { (name, value) ->
+                if (value == null) r.addOption(name) else r.addOption(name, value)
+            }
         } else {
             AudioOptions.ytDlpOptions(q.audioFormat, q.audioBitrate).forEach { (name, value) ->
                 if (value == null) r.addOption(name) else r.addOption(name, value)
@@ -788,8 +892,12 @@ class DownloadService : Service() {
         var lastPct = -1f
         YoutubeDL.execute(buildRequest(item, dir), id) { progress, eta, line ->
             if (id in cancelled) return@execute
+            if (line.contains("[EmbedSubtitle]")) embeddedSubs += id
+            if (line.contains("[EmbedThumbnail]")) embeddedCover += id
             val processing = line.contains("[Merger]") || line.contains("[ExtractAudio]") ||
-                line.contains("[VideoConvertor]") || line.contains("[Metadata]")
+                line.contains("[VideoConvertor]") || line.contains("[Metadata]") ||
+                line.contains("[EmbedSubtitle]") || line.contains("[SubtitlesConvertor]") ||
+                line.contains("[EmbedThumbnail]") || line.contains("[ThumbnailsConvertor]")
             if (processing) {
                 DownloadRepository.update(id) {
                     it.copy(state = State.PROCESSING, message = "Processing…")

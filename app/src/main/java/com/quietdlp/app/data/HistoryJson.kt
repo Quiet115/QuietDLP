@@ -30,7 +30,12 @@ object HistoryJson {
                     .put("groupId", i.groupId)
                     .put("groupIndex", i.groupIndex)
                     .put("groupTitle", i.groupTitle)
-                    .put("wifiOnly", i.wifiOnly),
+                    .put("wifiOnly", i.wifiOnly)
+                    .put("subs", i.subs?.encode())
+                    .put("trim", i.trim?.encode())
+                    .put("cover", i.cover)
+                    .put("sponsor", i.sponsor?.encode())
+                    .put("chapters", i.chapters.id),
             )
         }
         return arr.toString()
@@ -66,6 +71,11 @@ object HistoryJson {
                     groupIndex = o.optInt("groupIndex", 0),
                     groupTitle = o.optStringOrNull("groupTitle"),
                     wifiOnly = o.optBoolean("wifiOnly", false),
+                    subs = SubtitleChoice.decode(o.optStringOrNull("subs")),
+                    trim = TrimRange.decode(o.optStringOrNull("trim")),
+                    cover = o.optBoolean("cover", false),
+                    sponsor = SponsorChoice.decode(o.optStringOrNull("sponsor")),
+                    chapters = ChapterMode.fromId(o.optStringOrNull("chapters")),
                 )
             }.getOrNull()
         }

@@ -45,6 +45,22 @@ class HistoryJsonTest {
     }
 
     @Test
+    fun subtitleChoiceSurvivesAndOldHistoryHasNone() {
+        val withSubs = item("s", State.DONE).copy(subs = SubtitleChoice(listOf("en", "es"), SubtitleMode.SEPARATE, true))
+        val back = HistoryJson.decode(HistoryJson.encode(listOf(withSubs, item("n", State.DONE))))
+        assertEquals(SubtitleChoice(listOf("en", "es"), SubtitleMode.SEPARATE, true), back[0].subs)
+        assertNull(back[1].subs)
+    }
+
+    @Test
+    fun trimSurvivesAndOldHistoryHasNone() {
+        val trimmed = item("t", State.DONE).copy(trim = TrimRange(30, 40))
+        val back = HistoryJson.decode(HistoryJson.encode(listOf(trimmed, item("n", State.DONE))))
+        assertEquals(TrimRange(30, 40), back[0].trim)
+        assertNull(back[1].trim)
+    }
+
+    @Test
     fun aLongPlaylistIsNotCutAt200() {
         val many = (1..1000).map { item("p$it", State.DONE).copy(groupId = "G", groupIndex = it) }
         assertEquals(1000, HistoryJson.decode(HistoryJson.encode(many)).size)

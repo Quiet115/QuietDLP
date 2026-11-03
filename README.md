@@ -2,7 +2,7 @@
 
 Open-source video, audio and photo downloader for Android. Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) for video and audio and [gallery-dl](https://github.com/mikf/gallery-dl) for photos and galleries.
 
-Early version (0.2). Free and open source (GPL-3.0).
+Early version (0.3). Free and open source (GPL-3.0).
 
 ## What it does
 
@@ -12,11 +12,30 @@ Early version (0.2). Free and open source (GPL-3.0).
 - **Quality of your choice:** best, 1080p, 1440p, 2160p…, or audio only (M4A or MP3).
 - **Its own album:** videos and photos go to `DCIM/QuietDLP`; audio goes to `Music/QuietDLP`. The folder name and location can be changed.
 - **Default download** for Share and copied links: best video, 1080p, 720p, music (M4A or MP3), or ask each time. Rules per website (for example, music sites always audio).
+- **Playlists and several links** become one group. Up to 5 downloads at once, with a Wi-Fi only option.
+- **Subtitles:** pick the language and save them inside the video (MP4 or MKV) or as a `.srt` file.
+- **Trim:** download only a part of a video or song, with frames to see where you cut.
+- **Music** is named "Artist - Title" and tagged with title, artist and album, with a cover image when the site has one.
+- **Convert** a downloaded file to another format.
+- **Advanced:** SponsorBlock (remove or mark sponsor parts on YouTube), chapters (keep them or one file per chapter) and file name templates.
+- **Backup** of your settings and history.
 - **Simple and Advanced mode**, and color palettes: dark, colorful, light, wallpaper colors, or your own.
 - **History** with share and delete, a warning when a link was already downloaded, and automatic retry when the connection drops.
 - **Automatic updates** for yt-dlp, gallery-dl and the app itself. On by default, can be turned off in Settings.
 - **Sessions** for content that requires signing in, or by importing a `cookies.txt`.
 - No ads, no accounts of its own, no telemetry.
+
+## Check your copy
+
+QuietDLP is only published here, on GitHub Releases. It has no ads and no other website. If you got the app anywhere else, it may be a copy with something added.
+
+Every official release is signed with the same key. In the app, open Settings, then About, then Official source, and compare the signature with this one:
+
+```
+SHA-256: 9a9bd88d 2c2e581f 6d51ff79 0e340c28 74412a61 9d315c3b ad5e3f3b 32d01ac1
+```
+
+A copy could fake that screen, so the comparison is only as good as this page. To check the file itself before installing it, run `apksigner verify --print-certs QuietDLP.apk` and compare the SHA-256 digest of the signer certificate.
 
 ## Support
 

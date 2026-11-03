@@ -28,6 +28,10 @@ object MediaSaver {
 
     private fun mimeOf(file: File): String {
         val ext = file.extension.lowercase()
+        when (ext) {
+            "srt" -> return "application/x-subrip"
+            "vtt" -> return "text/vtt"
+        }
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)?.let { return it }
         return when (ext) {
             "m4a" -> "audio/mp4"
@@ -38,7 +42,12 @@ object MediaSaver {
         }
     }
 
-    fun publish(ctx: Context, file: File): Saved {
+    /**
+     * [together] = un vídeo y sus subtítulos sueltos. MediaStore no deja guardar un .srt en la carpeta de vídeos,
+     * solo en Descargas o Documentos, así que los dos van a Descargas/<carpeta> (con una carpeta elegida por el
+     * usuario no hay problema: ahí caben juntos).
+     */
+    fun publish(ctx: Context, file: File, together: Boolean = false): Saved {
         val mime = mimeOf(file)
         val folder = Prefs(ctx).folderName
         // Carpeta elegida por el usuario; si ya no se puede escribir en ella, se usa el álbum de la app.
@@ -47,9 +56,9 @@ object MediaSaver {
             runCatching { return publishToTree(ctx, file, mime, Uri.parse(tree), folder) }
         }
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            publishScoped(ctx, file, mime, folder)
+            publishScoped(ctx, file, mime, folder, together)
         } else {
-            publishLegacy(ctx, file, mime, folder)
+            publishLegacy(ctx, file, mime, folder, together)
         }
     }
 
@@ -92,14 +101,17 @@ object MediaSaver {
         return Saved(doc, mime, file.name)
     }
 
-    private fun relativePath(mime: String, folder: String) =
-        if (mime.startsWith("audio")) "${Environment.DIRECTORY_MUSIC}/$folder"
-        else "${Environment.DIRECTORY_DCIM}/$folder"
+    private fun relativePath(mime: String, folder: String, together: Boolean) = when {
+        together -> "${Environment.DIRECTORY_DOWNLOADS}/$folder"
+        mime.startsWith("audio") -> "${Environment.DIRECTORY_MUSIC}/$folder"
+        else -> "${Environment.DIRECTORY_DCIM}/$folder"
+    }
 
-    private fun publishScoped(ctx: Context, file: File, mime: String, folder: String): Saved {
+    private fun publishScoped(ctx: Context, file: File, mime: String, folder: String, together: Boolean): Saved {
         val resolver = ctx.contentResolver
         val volume = MediaStore.VOLUME_EXTERNAL_PRIMARY
         val collection = when {
+            together -> MediaStore.Downloads.getContentUri(volume)
             mime.startsWith("audio") -> MediaStore.Audio.Media.getContentUri(volume)
             mime.startsWith("image") -> MediaStore.Images.Media.getContentUri(volume)
             else -> MediaStore.Video.Media.getContentUri(volume)
@@ -107,7 +119,9 @@ object MediaSaver {
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
-            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath(mime, folder))
+            put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath(mime, folder, together))
+            // La Galería ordena por esta fecha: sin ella, un vídeo puede salir con la de su subida (de hace años).
+            if (!together && !mime.startsWith("audio")) put(MediaStore.MediaColumns.DATE_TAKEN, System.currentTimeMillis())
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
         val uri = resolver.insert(collection, values)
@@ -127,8 +141,12 @@ object MediaSaver {
     }
 
     @Suppress("DEPRECATION")
-    private fun publishLegacy(ctx: Context, file: File, mime: String, folder: String): Saved {
-        val top = if (mime.startsWith("audio")) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_DCIM
+    private fun publishLegacy(ctx: Context, file: File, mime: String, folder: String, together: Boolean): Saved {
+        val top = when {
+            together -> Environment.DIRECTORY_DOWNLOADS
+            mime.startsWith("audio") -> Environment.DIRECTORY_MUSIC
+            else -> Environment.DIRECTORY_DCIM
+        }
         val dir = File(Environment.getExternalStoragePublicDirectory(top), folder).apply { mkdirs() }
         var dest = File(dir, file.name)
         var n = 1

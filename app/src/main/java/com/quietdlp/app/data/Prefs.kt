@@ -180,6 +180,78 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("battery_hint_off", false)
         set(v) = sp.edit().putBoolean("battery_hint_off", v).apply()
 
+    /** Lo último que se eligió para los subtítulos: encendidos, idiomas (separados por coma) y dónde se guardan. */
+    var subsOn: Boolean
+        get() = sp.getBoolean("subs_on", false)
+        set(v) = sp.edit().putBoolean("subs_on", v).apply()
+
+    var subLangs: List<String>
+        get() = (sp.getString("sub_langs", "") ?: "").split(",").filter { it.isNotBlank() }
+        set(v) = sp.edit().putString("sub_langs", v.joinToString(",")).apply()
+
+    var subMode: SubtitleMode
+        get() = SubtitleMode.fromId(sp.getString("sub_mode", null))
+        set(v) = sp.edit().putString("sub_mode", v.id).apply()
+
+    /** Portada (la miniatura dentro del archivo): por defecto sí en audio y no en vídeo. */
+    var coverAudio: Boolean
+        get() = sp.getBoolean("cover_audio", true)
+        set(v) = sp.edit().putBoolean("cover_audio", v).apply()
+
+    var coverVideo: Boolean
+        get() = sp.getBoolean("cover_video", false)
+        set(v) = sp.edit().putBoolean("cover_video", v).apply()
+
+    fun coverFor(kind: Kind): Boolean = when (kind) {
+        Kind.AUDIO -> coverAudio
+        Kind.VIDEO -> coverVideo
+        Kind.PHOTO -> false
+    }
+
+    /** Los ajustes (y el historial, si se da) en un texto JSON, para guardarlos en un archivo (ver [SettingsBackup]). */
+    fun exportSettings(history: List<DownloadItem> = emptyList()): String = SettingsBackup.encode(sp.all, history)
+
+    /** Aplica los ajustes de una copia. Devuelve cuántos puso, o -1 si el texto no es una copia de QuietDLP. */
+    fun importSettings(json: String): Int {
+        val values = SettingsBackup.decode(json) ?: return -1
+        val e = sp.edit()
+        values.forEach { (key, v) ->
+            when (v) {
+                is Boolean -> e.putBoolean(key, v)
+                is Int -> e.putInt(key, v)
+                is String -> e.putString(key, v)
+            }
+        }
+        e.apply()
+        return values.size
+    }
+
+    /** Poner a la música el nombre "Artista - Título" y esos datos dentro del archivo. */
+    var musicNames: Boolean
+        get() = sp.getBoolean("music_names", true)
+        set(v) = sp.edit().putBoolean("music_names", v).apply()
+
+    /** El nombre de los archivos (modo Avanzado), con marcas como {title} (ver [FileNameTemplate]). */
+    var nameTemplate: String
+        get() = sp.getString("name_template", FileNameTemplate.DEFAULT) ?: FileNameTemplate.DEFAULT
+        set(v) = sp.edit().putString("name_template", v.take(200)).apply()
+
+    /** SponsorBlock: "off", "remove" o "mark", y las clases de partes (separadas por coma). */
+    var sponsorMode: String
+        get() = sp.getString("sponsor_mode", "off") ?: "off"
+        set(v) = sp.edit().putString("sponsor_mode", v).apply()
+
+    var sponsorCats: List<String>
+        get() = SponsorCategories.clean(
+            (sp.getString("sponsor_cats", null) ?: SponsorCategories.DEFAULT.joinToString(",")).split(",").toSet(),
+        )
+        set(v) = sp.edit().putString("sponsor_cats", v.joinToString(",")).apply()
+
+    /** Capítulos: "off", "embed" o "split". Por defecto van dentro del archivo. */
+    var chapterMode: String
+        get() = sp.getString("chapter_mode", "embed") ?: "embed"
+        set(v) = sp.edit().putString("chapter_mode", v).apply()
+
     /** Reglas por sitio, en JSON (ver SiteRules.encode). */
     var siteRules: String
         get() = sp.getString("site_rules", "[]") ?: "[]"

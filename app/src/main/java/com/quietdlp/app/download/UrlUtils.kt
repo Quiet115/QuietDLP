@@ -66,6 +66,12 @@ object Errors {
             "empty media response" in l || "age" in l && "restrict" in l
     }
 
+    /** true si falló el paso de meter la miniatura (portada) en el archivo: se puede repetir sin ella. */
+    fun isCoverProblem(t: Throwable): Boolean {
+        val l = errorLineOf(t).lowercase()
+        return "postprocessing" in l && ("thumbnail" in l || "cover" in l || "embed" in l)
+    }
+
     /**
      * true si yt-dlp no encontró vídeo en el enlace: publicaciones de solo fotos, galerías o webs que
      * yt-dlp no conoce. En esos casos se prueba con gallery-dl.
@@ -112,12 +118,21 @@ object Errors {
                 "No internet connection."
             "video unavailable" in l || "not available" in l ->
                 "The video isn't available."
+            "http error 403" in l -> "The site blocked the download. $ENGINE_HINT, then retry."
+            "unable to extract" in l -> "Couldn't read this page. $ENGINE_HINT, then retry."
+            "http error 404" in l -> "The page wasn't found."
+            "no space left" in l -> "Not enough space on the phone."
             // Quitar el prefijo técnico "[nombre-del-sitio] id:" que añade yt-dlp.
             else -> errorLine.removePrefix("ERROR:").trim()
                 .replace(Regex("""^\[[^\]]+]\s*\S+:\s*"""), "")
                 .take(220)
         }
     }
+
+    /** Lo que dicen los mensajes cuando lo más probable es un yt-dlp desactualizado: la fila ofrece actualizarlo. */
+    const val ENGINE_HINT = "Update the engine"
+
+    fun needsEngineUpdate(message: String?): Boolean = message != null && ENGINE_HINT in message
 
     fun cleanTitle(file: File): String = file.nameWithoutExtension.ifBlank { "Download" }
 }

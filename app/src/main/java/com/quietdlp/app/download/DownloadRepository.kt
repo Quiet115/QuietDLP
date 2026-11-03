@@ -48,6 +48,24 @@ object DownloadRepository {
         save()
     }
 
+    /**
+     * Pone en la lista las filas de una copia de seguridad que todavía no están (por id), debajo de las actuales: son
+     * más viejas. Devuelve cuántas añadió.
+     */
+    fun mergeHistory(ctx: Context, restored: List<DownloadItem>): Int {
+        var added: List<DownloadItem> = emptyList()
+        _items.update { current ->
+            val known = current.map { it.id }.toSet()
+            added = restored.filter { it.id !in known && !it.isActive }
+            current + added
+        }
+        if (added.isNotEmpty()) {
+            DownloadIndex.seed(ctx, added)
+            save()
+        }
+        return added.size
+    }
+
     fun get(id: String): DownloadItem? = _items.value.firstOrNull { it.id == id }
 
     fun update(id: String, block: (DownloadItem) -> DownloadItem) {

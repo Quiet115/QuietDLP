@@ -14,6 +14,7 @@ import com.quietdlp.app.data.PlaylistProbe
 import com.quietdlp.app.data.State
 import com.quietdlp.app.download.Connectivity
 import kotlinx.coroutines.async
+import java.util.Locale
 import java.util.UUID
 import com.quietdlp.app.data.AudioOption
 import com.quietdlp.app.data.AudioOptions
@@ -30,12 +31,27 @@ import com.quietdlp.app.download.DownloadIndex
 import com.quietdlp.app.download.MediaFiles
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.quietdlp.app.data.Kind
+import com.quietdlp.app.data.ChapterMode
+import com.quietdlp.app.data.CoverOptions
+import com.quietdlp.app.data.MediaProbe
 import com.quietdlp.app.data.QualityLevel
+import com.quietdlp.app.data.SettingsBackup
+import com.quietdlp.app.data.SponsorCategories
+import com.quietdlp.app.data.SponsorChoice
+import com.quietdlp.app.data.SponsorMode
+import com.quietdlp.app.data.SubtitleChoice
+import com.quietdlp.app.data.SubtitleMode
+import com.quietdlp.app.data.SubtitleProbe
+import com.quietdlp.app.data.Storyboard
+import com.quietdlp.app.data.SubtitleTrack
+import com.quietdlp.app.data.TrimRange
 import com.quietdlp.app.data.Prefs
 import com.quietdlp.app.data.Quality
 import android.net.Uri
@@ -64,6 +80,12 @@ data class MediaInfo(
     val photoCount: Int = 0,
     /** > 0 → el enlace es una lista con tantos vídeos (se pueden bajar todos). */
     val playlistCount: Int = 0,
+    /** Los subtítulos que ofrece el sitio (vacío si no hay o si el enlace es una lista). */
+    val subtitles: List<SubtitleTrack> = emptyList(),
+    /** Fotogramas del vídeo para ver qué parte se recorta (solo algunos sitios, como YouTube). */
+    val storyboard: Storyboard? = null,
+    /** Cuántos capítulos trae el vídeo. */
+    val chapterCount: Int = 0,
 )
 
 /** Un enlace con varios archivos: se pregunta cuáles bajar antes de empezar (ver [MainViewModel.confirmSelection]). */
@@ -106,6 +128,181 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     private val startAudio = AudioOptions.find(prefs.audioFormat, prefs.audioBitrate)
     var audioFormat by mutableStateOf(startAudio.format)
     var audioBitrate by mutableIntStateOf(startAudio.bitrate)
+
+    // ── Portada: la miniatura dentro del archivo ──
+    /** Lo que muestra el interruptor de la tarjeta; empieza con lo que diga Ajustes para este tipo de descarga. */
+    var cover by mutableStateOf(false)
+        private set
+
+    fun changeCover(v: Boolean) {
+        cover = v
+    }
+
+    // ── SponsorBlock, capítulos y nombre de los archivos (modo Avanzado) ──
+    var sponsorMode by mutableStateOf(SponsorMode.fromId(prefs.sponsorMode))
+        private set
+    var sponsorCats by mutableStateOf(prefs.sponsorCats)
+        private set
+    var chapterMode by mutableStateOf(ChapterMode.fromId(prefs.chapterMode))
+        private set
+    var nameTemplate by mutableStateOf(prefs.nameTemplate)
+        private set
+
+    /** SponsorBlock solo tiene datos de YouTube, y no se mezcla con un trozo (sus tiempos son los del vídeo entero). */
+    fun canSponsor(i: MediaInfo): Boolean =
+        advanced && SponsorChoice.supports(i.url) && i.photoCount == 0 && i.playlistCount == 0 && !trimOn
+
+    fun canChapters(i: MediaInfo): Boolean =
+        advanced && i.chapterCount > 0 && i.photoCount == 0 && i.playlistCount == 0 && !trimOn
+
+    fun chooseSponsorMode(m: SponsorMode?) {
+        sponsorMode = m
+        prefs.sponsorMode = m?.id ?: "off"
+    }
+
+    fun toggleSponsorCategory(code: String) {
+        sponsorCats = SponsorCategories.clean(if (code in sponsorCats) sponsorCats - code else sponsorCats + code)
+        prefs.sponsorCats = sponsorCats
+    }
+
+    fun chooseChapterMode(m: ChapterMode) {
+        chapterMode = m
+        prefs.chapterMode = m.id
+    }
+
+    fun changeNameTemplate(v: String) {
+        nameTemplate = v.take(200)
+        prefs.nameTemplate = nameTemplate
+    }
+
+    private fun sponsorChoice(i: MediaInfo): SponsorChoice? {
+        val m = sponsorMode ?: return null
+        return if (canSponsor(i) && sponsorCats.isNotEmpty()) SponsorChoice(m, sponsorCats) else null
+    }
+
+    /** Quitar partes con SponsorBlock cambia la duración: los subtítulos no se piden para no dejarlos desfasados. */
+    fun removingParts(i: MediaInfo): Boolean = sponsorChoice(i)?.mode == SponsorMode.REMOVE
+
+    private fun chapterChoice(i: MediaInfo): ChapterMode = if (canChapters(i)) chapterMode else ChapterMode.OFF
+
+    /** Si se pide de verdad: encendida y posible para este tipo de descarga (WAV y fotos no pueden llevar imagen). */
+    private fun coverWanted(q: Quality): Boolean = cover && CoverOptions.available(q.kind, q.audioFormat)
+
+    // ── Recortar: bajar solo un trozo ──
+    var trimOn by mutableStateOf(false)
+        private set
+    var trimStart by mutableIntStateOf(0)
+        private set
+    var trimEnd by mutableIntStateOf(0)
+        private set
+
+    /** Se puede recortar un vídeo o audio suelto cuya duración se conoce (no listas, fotos ni directos). */
+    fun canTrim(i: MediaInfo): Boolean = i.photoCount == 0 && i.playlistCount == 0 && i.durationSec > 1
+
+    fun changeTrimOn(v: Boolean) {
+        trimOn = v
+        if (v) info?.storyboard?.let(::loadFrames)
+    }
+
+    // Fotogramas: las imágenes con cuadrícula se bajan al encender el recorte y de cada una se recorta el fotograma pedido.
+    private val grids = mutableStateMapOf<Int, android.graphics.Bitmap>()
+    private val cropped = HashMap<Triple<Int, Int, Int>, androidx.compose.ui.graphics.ImageBitmap>()
+    private var framesJob: kotlinx.coroutines.Job? = null
+
+    private fun loadFrames(sb: Storyboard) {
+        if (grids.isNotEmpty() || framesJob?.isActive == true) return
+        framesJob = viewModelScope.launch(Dispatchers.IO) {
+            sb.fragments.forEachIndexed { n, f ->
+                val bmp = runCatching { com.quietdlp.app.download.FrameFetch.bitmap(f.url) }.getOrNull()
+                if (bmp != null) withContext(Dispatchers.Main) { grids[n] = bmp }
+            }
+        }
+    }
+
+    private fun clearFrames() {
+        framesJob?.cancel()
+        framesJob = null
+        grids.clear()
+        cropped.clear()
+    }
+
+    /** El fotograma del segundo [sec]; null mientras no se ha bajado o si el sitio no los ofrece. */
+    fun frameAt(sec: Int): androidx.compose.ui.graphics.ImageBitmap? {
+        val i = info ?: return null
+        val sb = i.storyboard ?: return null
+        val ref = sb.locate(sec.toDouble(), i.durationSec) ?: return null
+        val grid = grids[ref.fragment] ?: return null
+        return cropped.getOrPut(Triple(ref.fragment, ref.col, ref.row)) {
+            val x = ref.col * sb.width
+            val y = ref.row * sb.height
+            if (x + sb.width > grid.width || y + sb.height > grid.height) return null
+            android.graphics.Bitmap.createBitmap(grid, x, y, sb.width, sb.height).asImageBitmap()
+        }
+    }
+
+    /** Pone el trozo dentro de la duración y con al menos un segundo. */
+    fun setTrim(start: Int, end: Int) {
+        val d = info?.durationSec ?: return
+        val s = start.coerceIn(0, d - 1)
+        trimStart = s
+        trimEnd = end.coerceIn(s + 1, d)
+    }
+
+    /** Al escribir el inicio o el fin a mano se devuelve lo que quedó, para mostrarlo ya corregido. */
+    fun setTrimStart(sec: Int): Int {
+        setTrim(sec.coerceAtMost(trimEnd - 1), trimEnd)
+        return trimStart
+    }
+
+    fun setTrimEnd(sec: Int): Int {
+        setTrim(trimStart, sec.coerceAtLeast(trimStart + 1))
+        return trimEnd
+    }
+
+    /** El trozo pedido, o null si no hay que recortar (apagado, todo el archivo, o no se puede). */
+    private fun trimChoice(i: MediaInfo): TrimRange? =
+        if (!trimOn || !canTrim(i)) null else TrimRange.choose(trimStart, trimEnd, i.durationSec)
+
+    // ── Subtítulos (solo vídeo) ──
+    var subsOn by mutableStateOf(prefs.subsOn)
+        private set
+    var subCodes by mutableStateOf<List<String>>(emptyList())
+        private set
+    var subMode by mutableStateOf(prefs.subMode)
+        private set
+
+    /** Dónde van los subtítulos: el modo simple siempre los mete dentro del vídeo; el avanzado deja elegir. */
+    val effectiveSubMode: SubtitleMode get() = if (advanced) subMode else SubtitleMode.INSIDE
+
+    fun changeSubsOn(v: Boolean) {
+        subsOn = v
+        prefs.subsOn = v
+    }
+
+    /** Modo simple: un solo idioma. */
+    fun chooseSubtitle(code: String) {
+        subCodes = listOf(code)
+        prefs.subLangs = subCodes
+    }
+
+    /** Modo avanzado: se suman o se quitan idiomas. */
+    fun toggleSubtitle(code: String) {
+        subCodes = if (code in subCodes) subCodes - code else subCodes + code
+        prefs.subLangs = subCodes
+    }
+
+    fun chooseSubMode(m: SubtitleMode) {
+        subMode = m
+        prefs.subMode = m
+    }
+
+    /** Lo que se pide a yt-dlp, o null si no hay que bajar subtítulos (apagados, sin idioma, audio, fotos o lista). */
+    private fun subtitleChoice(i: MediaInfo): SubtitleChoice? {
+        if (kind != Kind.VIDEO || !subsOn || i.photoCount > 0 || i.playlistCount > 0 || removingParts(i)) return null
+        val codes = subCodes.filter { c -> i.subtitles.any { it.code == c } }
+        if (codes.isEmpty()) return null
+        return SubtitleChoice(codes, effectiveSubMode, includeAuto = i.subtitles.any { it.auto && it.code in codes })
+    }
 
     // ── Motor ──
     var engineReady by mutableStateOf(false)
@@ -223,6 +420,12 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         private set
     var clipboardOffer by mutableStateOf(prefs.clipboardOffer)
         private set
+    var coverAudio by mutableStateOf(prefs.coverAudio)
+        private set
+    var musicNames by mutableStateOf(prefs.musicNames)
+        private set
+    var coverVideo by mutableStateOf(prefs.coverVideo)
+        private set
 
     // ── Actualización automática ──
     var autoUpdate by mutableStateOf(prefs.autoUpdate)
@@ -282,7 +485,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             return
         }
         DownloadRepository.remove(item.id)
-        DownloadService.enqueue(app, item.url, item.quality, item.title, item.thumbnail)
+        DownloadService.enqueue(app, item.url, item.quality, item.title, item.thumbnail, subs = item.subs, trim = item.trim, cover = item.cover, sponsor = item.sponsor, chapters = item.chapters)
     }
 
     fun logout(host: String) {
@@ -492,6 +695,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         error = null
         info = null
         playlist = null
+        clearFrames()
         viewModelScope.launch {
             val probe = async { probePlaylist(u) }
             try {
@@ -500,27 +704,31 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     addOption("--no-playlist")
                     // Publicaciones con varios vídeos: basta el primero para mostrar título y calidades.
                     addOption("--playlist-items", "1")
+                    // Se lee el JSON a mano (y no con getInfo) porque getInfo no trae los subtítulos.
+                    addOption("--dump-json")
                     CookieStore.mergedPath(app)?.let { addOption("--cookies", it) }
                 }
-                val vi = withContext(Dispatchers.IO) { YoutubeDL.getInfo(req) }
-                // Calidad = lado corto (1080×1920 vertical es 1080p), como se acostumbra y como ordena yt-dlp.
-                val heights = vi.formats.orEmpty()
-                    .filter { (it.vcodec ?: "none") != "none" && it.height > 0 }
-                    .map { f -> if (f.width > 0) minOf(f.width, f.height) else f.height }
-                    .filter { it >= 144 }
-                    .distinct()
-                    .sortedDescending()
+                val vi = withContext(Dispatchers.IO) { MediaProbe.parse(YoutubeDL.execute(req).out) }
+                    ?: error("Unable to parse video information")
+                val heights = vi.heights
                 val list = probe.await()
                 playlist = list
                 info = MediaInfo(
                     url = u,
-                    title = list?.title ?: vi.title ?: vi.fulltitle ?: UrlUtils.shorten(u),
+                    title = list?.title ?: vi.title ?: UrlUtils.shorten(u),
                     thumbnail = list?.entries?.firstNotNullOfOrNull { it.thumbnail } ?: vi.thumbnail,
                     uploader = if (list != null) null else vi.uploader,
-                    durationSec = if (list != null) 0 else vi.duration,
+                    durationSec = if (list != null) 0 else vi.durationSec,
                     heights = heights,
                     playlistCount = list?.entries?.size ?: 0,
+                    subtitles = if (list != null) emptyList() else vi.subtitles,
+                    storyboard = if (list != null) null else vi.storyboard,
+                    chapterCount = if (list != null) 0 else vi.chapterCount,
                 )
+                subCodes = SubtitleProbe.preselect(vi.subtitles, prefs.subLangs, Locale.getDefault().language)
+                trimOn = false
+                trimStart = 0
+                trimEnd = if (list != null) 0 else vi.durationSec
                 // Si no hay vídeo (solo audio) cambiar a audio automáticamente.
                 if (heights.isEmpty()) kind = Kind.AUDIO
                 if (height != 0 && height !in heights) height = 0
@@ -593,6 +801,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         }
         // El modo simple muestra la calidad (alta, media, baja) que más se parece a lo que quedó elegido.
         level = QualityLevel.fromQuality(Quality(kind, height, audioFormat, audioBitrate))
+        cover = prefs.coverFor(kind)
     }
 
     /** La calidad elegida en el modo simple (alta, media o baja). */
@@ -609,6 +818,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Vídeo o audio. En el modo simple se vuelve a aplicar la calidad elegida al nuevo tipo. */
     fun chooseKind(k: Kind) {
         kind = k
+        cover = prefs.coverFor(k)
         if (!advanced) chooseLevel(level)
     }
 
@@ -629,9 +839,15 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         }
         val list = playlist
         if (list != null && kind != Kind.PHOTO) requestGroup(list.title, list.entries, q)
-        else requestDownload(i.url, q, i.title, i.thumbnail)
+        else {
+            val trim = trimChoice(i)
+            // Los subtítulos no se recortan con el vídeo, así que con un trozo no se piden.
+            requestDownload(i.url, q, i.title, i.thumbnail, if (trim == null) subtitleChoice(i) else null, trim, coverWanted(q),
+                sponsorChoice(i), chapterChoice(i))
+        }
         info = null
         playlist = null
+        clearFrames()
         url = ""
         error = null
     }
@@ -687,6 +903,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     groupIndex = i,
                     groupTitle = title,
                     wifiOnly = waitForWifi,
+                    cover = coverWanted(quality),
                 )
             }
             DownloadRepository.addAll(items)
@@ -773,7 +990,17 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
 
     // ── Enlaces ya descargados ──
     /** Descarga pendiente de confirmar porque el enlace ya se descargó (o está en curso). */
-    class DuplicatePrompt(val active: Boolean, val url: String, val quality: Quality, val title: String?, val thumbnail: String?)
+    class DuplicatePrompt(
+        val active: Boolean,
+        val url: String,
+        val quality: Quality,
+        val title: String?,
+        val thumbnail: String?,
+        val subs: SubtitleChoice? = null,
+        val cover: Boolean? = null,
+        val sponsor: SponsorChoice? = null,
+        val chapters: ChapterMode = ChapterMode.OFF,
+    )
 
     var duplicatePrompt by mutableStateOf<DuplicatePrompt?>(null)
         private set
@@ -782,19 +1009,30 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         DownloadIndex.check(app, url, kind, title)
 
     /** Descarga, pero antes avisa si ese enlace ya está descargado. */
-    fun requestDownload(url: String, quality: Quality, title: String? = null, thumbnail: String? = null) {
-        val dup = findDuplicate(url, quality.kind, title)
+    fun requestDownload(
+        url: String,
+        quality: Quality,
+        title: String? = null,
+        thumbnail: String? = null,
+        subs: SubtitleChoice? = null,
+        trim: TrimRange? = null,
+        cover: Boolean? = null,
+        sponsor: SponsorChoice? = null,
+        chapters: ChapterMode = ChapterMode.OFF,
+    ) {
+        // Un trozo es otro archivo distinto del completo: no hay aviso de duplicado.
+        val dup = if (trim != null) DownloadIndex.Dup.NONE else findDuplicate(url, quality.kind, title)
         if (dup != DownloadIndex.Dup.NONE) {
-            duplicatePrompt = DuplicatePrompt(dup == DownloadIndex.Dup.ACTIVE, url, quality, title, thumbnail)
+            duplicatePrompt = DuplicatePrompt(dup == DownloadIndex.Dup.ACTIVE, url, quality, title, thumbnail, subs, cover, sponsor, chapters)
         } else {
-            DownloadService.enqueue(app, url, quality, title, thumbnail)
+            DownloadService.enqueue(app, url, quality, title, thumbnail, subs = subs, trim = trim, cover = cover, sponsor = sponsor, chapters = chapters)
         }
     }
 
     fun confirmDuplicate() {
         val p = duplicatePrompt ?: return
         duplicatePrompt = null
-        DownloadService.enqueue(app, p.url, p.quality, p.title, p.thumbnail)
+        DownloadService.enqueue(app, p.url, p.quality, p.title, p.thumbnail, subs = p.subs, cover = p.cover, sponsor = p.sponsor, chapters = p.chapters)
     }
 
     fun dismissDuplicate() {
@@ -947,7 +1185,8 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun remove(id: String) = DownloadRepository.remove(id)
     fun clearFinished() = DownloadRepository.clearFinished()
 
-    fun updateEngine() {
+    /** Actualiza yt-dlp. [then] se ejecuta al terminar (por ejemplo, reintentar la descarga que falló). */
+    fun updateEngine(then: (() -> Unit)? = null) {
         if (updating) return
         updating = true
         updateMessage = null
@@ -959,6 +1198,57 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             }
             ytdlpVersion = Engine.version(app)
             updating = false
+            then?.invoke()
+        }
+    }
+
+    // ── Copia de seguridad de los ajustes ──
+    var backupMessage by mutableStateOf<String?>(null)
+        private set
+
+    fun saveSettingsTo(uri: Uri) {
+        viewModelScope.launch {
+            backupMessage = withContext(Dispatchers.IO) {
+                runCatching {
+                    app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(prefs.exportSettings(DownloadRepository.items.value).toByteArray()) }
+                        ?: error("Couldn't write the file")
+                    "Backup saved."
+                }.getOrElse { "Couldn't save: ${it.message}" }
+            }
+        }
+    }
+
+    /** Lee todo el archivo, o devuelve null si pasa de [max] bytes (sin cargar un archivo enorme en memoria). */
+    private fun readAtMost(input: java.io.InputStream, max: Int): ByteArray? {
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(8 * 1024)
+        while (true) {
+            val n = input.read(buf)
+            if (n < 0) break
+            if (out.size() + n > max) return null
+            out.write(buf, 0, n)
+        }
+        return out.toByteArray()
+    }
+
+    fun restoreSettingsFrom(uri: Uri) {
+        viewModelScope.launch {
+            backupMessage = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bytes = app.contentResolver.openInputStream(uri)?.use { readAtMost(it, SettingsBackup.MAX_BYTES) }
+                        ?: error("Couldn't read the file")
+                    if (bytes == null) return@runCatching "That file is too big to be a QuietDLP backup."
+                    val text = String(bytes)
+                    val n = prefs.importSettings(text)
+                    if (n < 0) return@runCatching "That isn't a QuietDLP backup."
+                    val rows = DownloadRepository.mergeHistory(app, SettingsBackup.decodeHistory(text))
+                    buildString {
+                        append("Restored $n settings")
+                        if (rows > 0) append(" and $rows history ${if (rows == 1) "item" else "items"}")
+                        append(". Close the app and open it again to apply the settings.")
+                    }
+                }.getOrElse { "Couldn't restore: ${it.message}" }
+            }
         }
     }
 
@@ -970,6 +1260,21 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun changeRememberLast(v: Boolean) {
         rememberLast = v
         prefs.rememberLast = v
+    }
+
+    fun changeMusicNames(v: Boolean) {
+        musicNames = v
+        prefs.musicNames = v
+    }
+
+    fun changeCoverAudio(v: Boolean) {
+        coverAudio = v
+        prefs.coverAudio = v
+    }
+
+    fun changeCoverVideo(v: Boolean) {
+        coverVideo = v
+        prefs.coverVideo = v
     }
 
     fun changeClipboardOffer(v: Boolean) {

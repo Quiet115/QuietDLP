@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -76,10 +77,12 @@ import com.quietdlp.app.data.Prefs
 import com.quietdlp.app.data.Quality
 import com.quietdlp.app.data.SiteRule
 import com.quietdlp.app.data.SiteRules
+import com.quietdlp.app.data.FileNameTemplate
 import com.quietdlp.app.data.Slideshow
 import com.quietdlp.app.download.CookieStore
 import com.quietdlp.app.download.ErrorLog
 import com.quietdlp.app.update.AppUpdater
+import com.quietdlp.app.update.AppIdentity
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -134,6 +137,21 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     vm.photosEnabled, vm::changePhotosEnabled,
                 )
                 SwitchRow(
+                    "Name music \"Artist - Title\"",
+                    if (vm.musicNames) "Also fills the artist, title and album tags." else "Off. Files keep the video title.",
+                    vm.musicNames, vm::changeMusicNames,
+                )
+                SwitchRow(
+                    "Cover image in music",
+                    if (vm.coverAudio) "The thumbnail goes inside the file, as the album picture." else "Off.",
+                    vm.coverAudio, vm::changeCoverAudio,
+                )
+                SwitchRow(
+                    "Cover image in videos",
+                    if (vm.coverVideo) "The thumbnail goes inside the file." else "Off.",
+                    vm.coverVideo, vm::changeCoverVideo,
+                )
+                SwitchRow(
                     "Video from photos and music",
                     if (vm.autoPhotoVideo) "Makes the video by itself when a post has a song." else "Off. Use Make video on the download.",
                     vm.autoPhotoVideo, vm::changeAutoPhotoVideo,
@@ -172,8 +190,14 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 }
             }
 
+            // ───── Nombre de los archivos (solo Avanzado) ─────
+            if (vm.advanced) NameSection(vm)
+
             // ───── Cola ─────
             QueueSection(vm)
+
+            // ───── Copia de seguridad ─────
+            BackupSection(vm)
 
             // ───── Reglas por sitio ─────
             SitesSection(vm)
@@ -265,6 +289,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
 
             // ───── Apoyo y licencia ─────
             SectionCard("About") {
+                OfficialSource()
                 if (Links.DONATE_URL.isNotBlank()) {
                     OutlinedButton(
                         onClick = {
@@ -439,6 +464,83 @@ private fun Hint(text: String) = Text(
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
 )
+
+/** De dónde viene la app de verdad y cómo comprobar que esta copia lo es. */
+@Composable
+private fun OfficialSource() {
+    val ctx = LocalContext.current
+    val sha = remember { AppIdentity.signatureSha256(ctx) }
+    fun copy(label: String, text: String) {
+        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText(label, text))
+        Toast.makeText(ctx, "Copied", Toast.LENGTH_SHORT).show()
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Official source", style = MaterialTheme.typography.titleSmall)
+        Hint("QuietDLP is only on GitHub. It has no ads and no other website. If you got it somewhere else, it may be a copy.")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = {
+                runCatching {
+                    ctx.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(Links.SOURCE_URL + "/releases")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }) { Text("Open page") }
+            TextButton(onClick = { copy("QuietDLP link", Links.SOURCE_URL) }) { Text("Copy link") }
+        }
+        if (sha != null) {
+            Text("Signature of this copy (SHA-256)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(AppIdentity.grouped(sha), style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Hint("It's the same in every official release. If it differs, don't trust this copy.") }
+                TextButton(onClick = { copy("QuietDLP signature", sha) }) { Text("Copy") }
+            }
+        }
+    }
+}
+
+/** Cómo se llaman los archivos descargados (modo Avanzado). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NameSection(vm: MainViewModel) {
+    SectionCard("File names") {
+        Hint("How downloaded files are named. Music keeps \"Artist - Title\" while that setting is on.")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FileNameTemplate.PRESETS.forEach { (label, template) ->
+                QuietChip(vm.nameTemplate == template, { vm.changeNameTemplate(template) }, label)
+            }
+        }
+        OutlinedTextField(
+            value = vm.nameTemplate,
+            onValueChange = vm::changeNameTemplate,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Name") },
+            singleLine = true,
+        )
+        Hint("Marks: {title} {channel} {date} {id} {resolution}")
+        Hint("Looks like: ${FileNameTemplate.preview(vm.nameTemplate)}")
+    }
+}
+
+/** Guardar los ajustes en un archivo y ponerlos de vuelta (por ejemplo en otro móvil). */
+@Composable
+private fun BackupSection(vm: MainViewModel) {
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) vm.saveSettingsTo(uri)
+    }
+    val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.restoreSettingsFrom(uri)
+    }
+    SectionCard("Backup") {
+        Hint("Your history stays when you update the app. A backup keeps it if you ever uninstall.")
+        Hint("Settings and history. Sessions, the chosen folder and the files themselves aren't included.")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { save.launch("quietdlp-backup.json") }) { Text("Save backup") }
+            OutlinedButton(onClick = { restore.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text("Restore backup") }
+        }
+        vm.backupMessage?.let { Hint(it) }
+    }
+}
 
 @Composable
 private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
