@@ -2,6 +2,8 @@ package com.quietdlp.app.download
 
 import android.content.Context
 import com.quietdlp.app.data.PlaylistEntry
+import com.quietdlp.app.data.Prefs
+import com.quietdlp.app.data.SiteKeys
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
@@ -65,8 +67,11 @@ object GalleryDl {
         }
     }
 
-    private fun cookiesArgs(ctx: Context): List<String> =
-        CookieStore.mergedPath(ctx)?.let { listOf("--cookies", it) }.orEmpty()
+    private fun cookiesArgs(ctx: Context): List<String> {
+        val prefs = Prefs(ctx)
+        return CookieStore.mergedPath(ctx)?.let { listOf("--cookies", it) }.orEmpty() +
+            SiteKeys.galleryArgs(prefs.siteAddress, prefs.siteUser, prefs.siteKey)
+    }
 
     private fun builder(ctx: Context, args: List<String>): ProcessBuilder {
         ensureInstalled(ctx)
@@ -209,6 +214,7 @@ object GalleryDl {
     private fun describeFailure(out: String, code: Int): String {
         val lines = out.lines().map { it.trim() }.filter { it.isNotEmpty() }
         val l = out.lowercase()
+        if ("api-key" in l || "api_key" in l) return "ERROR: this page needs your key. Add it in Settings, Site keys."
         val needsLogin = "authrequired" in l || "login" in l || "sessionid" in l || "401" in l ||
             "cookies" in l || "private" in l || "nsfw" in l && "log in" in l
         val last = lines.lastOrNull { "error" in it.lowercase() || "warning" in it.lowercase() } ?: lines.lastOrNull().orEmpty()

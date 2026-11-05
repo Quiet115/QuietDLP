@@ -13,6 +13,7 @@ import com.quietdlp.app.data.PlaylistInfo
 import com.quietdlp.app.data.FollowEngine
 import com.quietdlp.app.data.FollowInterval
 import com.quietdlp.app.data.FollowUrl
+import com.quietdlp.app.data.SiteKeys
 import com.quietdlp.app.data.FollowedPage
 import com.quietdlp.app.download.FollowChecker
 import com.quietdlp.app.download.FollowProbe
@@ -645,6 +646,30 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         followWifiOnly = v
         prefs.followWifiOnly = v
         FollowScheduler.update(app)
+    }
+
+    /** La clave de una web de fotos (de la cuenta del propio usuario) para poder seguirla. */
+    var keySet by mutableStateOf(SiteKeys.category(prefs.siteAddress) != null && SiteKeys.valid(prefs.siteUser, prefs.siteKey))
+        private set
+
+    /** Guarda el usuario y la clave. false si no tienen forma de usuario y clave. */
+    fun saveSiteKey(address: String, user: String, key: String): Boolean {
+        if (SiteKeys.category(address) == null) return false
+        val u = SiteKeys.cleanUser(user)
+        val k = SiteKeys.cleanKey(key)
+        if (!SiteKeys.valid(u, k)) return false
+        prefs.siteAddress = address.trim()
+        prefs.siteUser = u
+        prefs.siteKey = k
+        keySet = true
+        return true
+    }
+
+    fun clearSiteKey() {
+        prefs.siteAddress = ""
+        prefs.siteUser = ""
+        prefs.siteKey = ""
+        keySet = false
     }
 
     /** Lo que se escribe en el cuadro de seguir una página. */

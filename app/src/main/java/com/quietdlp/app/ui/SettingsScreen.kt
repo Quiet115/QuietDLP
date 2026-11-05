@@ -67,6 +67,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.quietdlp.app.Links
 import com.quietdlp.app.LoginActivity
 import com.quietdlp.app.MainViewModel
+import com.quietdlp.app.data.SiteKeys
 import com.quietdlp.app.data.AppOrientation
 import com.quietdlp.app.data.AudioTier
 import com.quietdlp.app.data.DownloadMode
@@ -349,6 +350,7 @@ private fun QueueSection(vm: MainViewModel) {
                 QuietChip(!vm.followWifiOnly, { vm.changeFollowWifiOnly(false) }, "Wi-Fi and data")
             }
         }
+        SiteKeySection(vm)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Links with several files", style = MaterialTheme.typography.titleSmall)
             Hint(if (vm.askMulti) "Asks which ones to download." else "Downloads all of them without asking.")
@@ -466,6 +468,40 @@ private fun ModePicker(selected: DownloadMode?, includeAsk: Boolean, onPick: (Do
         if (includeAsk) {
             FlowRow { QuietChip(selected == DownloadMode.ASK, { onPick(DownloadMode.ASK) }, DownloadMode.ASK.label) }
         }
+    }
+}
+
+/** La clave de una web de fotos: usuario y clave de API de la cuenta del propio usuario. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SiteKeySection(vm: MainViewModel) {
+    var dialog by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Site keys", style = MaterialTheme.typography.titleSmall)
+        Hint(if (vm.keySet) "Key saved." else "No key.")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { dialog = true }) { Text(if (vm.keySet) "Change key" else "Add key") }
+            if (vm.keySet) TextButton(onClick = vm::clearSiteKey) { Text("Remove") }
+        }
+    }
+    if (dialog) {
+        var address by remember { mutableStateOf("") }
+        var user by remember { mutableStateOf("") }
+        var key by remember { mutableStateOf("") }
+        val ok = SiteKeys.category(address) != null && SiteKeys.valid(SiteKeys.cleanUser(user), SiteKeys.cleanKey(key))
+        AlertDialog(
+            onDismissRequest = { dialog = false },
+            title = { Text("Site key") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(address, { address = it }, label = { Text("Site address") }, singleLine = true)
+                    OutlinedTextField(user, { user = it }, label = { Text("User ID") }, singleLine = true)
+                    OutlinedTextField(key, { key = it }, label = { Text("API key") }, singleLine = true)
+                }
+            },
+            confirmButton = { TextButton(onClick = { if (vm.saveSiteKey(address, user, key)) dialog = false }, enabled = ok) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { dialog = false }) { Text("Cancel") } },
+        )
     }
 }
 

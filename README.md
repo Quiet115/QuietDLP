@@ -19,6 +19,7 @@ Early version (0.4). Free and open source (GPL-3.0).
 - **Convert** a downloaded file to another format.
 - **Advanced:** SponsorBlock (remove or mark sponsor parts on YouTube), chapters (keep them or one file per chapter) and file name templates.
 - **Follow a page:** channels, playlists and photo galleries. It checks on its own and downloads only what is new, or just marks it "New". Checks run in the background; Android doesn't allow starting a download from there, so on some phones new items start when you open the app.
+- **Site keys:** some photo sites need your own key. Add it in Settings; it stays on your phone and is not in backups.
 - **Backup** of your settings, history and followed pages.
 - **Simple and Advanced mode**, and color palettes: dark, colorful, light, wallpaper colors, or your own.
 - **History** with share and delete, a warning when a link was already downloaded, and automatic retry when the connection drops.

@@ -76,7 +76,7 @@ object FollowChecker {
                 return FollowProbe(FollowEngine.GALLERY, FollowUrl.galleryTitle(url), files.firstNotNullOfOrNull { it.thumbnail }, files)
             }
             val ge = g.exceptionOrNull()
-            if (ge != null && (Errors.isLoginRequired(ge) || firstError == null || Errors.isNoVideo(firstError!!))) throw ge
+            if (ge != null && (Errors.isLoginRequired(ge) || ge.message.orEmpty().contains("needs your key") || firstError == null || Errors.isNoVideo(firstError!!))) throw ge
         }
         firstError?.let { if (Errors.isLoginRequired(it)) throw it }
         throw Exception(if (y != null) "There's nothing to follow on this page yet." else "This page doesn't have a list to follow.")

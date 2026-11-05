@@ -170,6 +170,19 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("wifi_only", false)
         set(v) = sp.edit().putBoolean("wifi_only", v).apply()
 
+    /** Usuario y clave de API de una web de fotos (de la cuenta del propio usuario). No entran en la copia de seguridad. */
+    var siteAddress: String
+        get() = sp.getString("site_address", "") ?: ""
+        set(v) = sp.edit().putString("site_address", v).apply()
+
+    var siteUser: String
+        get() = sp.getString("site_user", "") ?: ""
+        set(v) = sp.edit().putString("site_user", v).apply()
+
+    var siteKey: String
+        get() = sp.getString("site_key", "") ?: ""
+        set(v) = sp.edit().putString("site_key", v).apply()
+
     /** Revisar las páginas seguidas (y bajar lo nuevo) solo con Wi-Fi. */
     var followWifiOnly: Boolean
         get() = sp.getBoolean("follow_wifi", true)
