@@ -764,7 +764,7 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boolean, isSelected: Boolean) {
     val ctx = LocalContext.current
@@ -852,10 +852,10 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                         else -> {}
                     }
 
-                    if (!selecting) Row(
+                    // Los botones pasan a otra línea si no caben (una publicación de fotos con canción trae muchos).
+                    if (!selecting) FlowRow(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         when {
                             item.isActive -> TextButton(onClick = { vm.cancel(item.id) }) { Text("Cancel") }
