@@ -695,7 +695,9 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                     }
                 }
 
-                if (info.photoCount > 0) {
+                if (info.profile != null) {
+                    ProfileSection(vm, info.profile)
+                } else if (info.photoCount > 0) {
                     StatusPill("Photos", Tone.ACTIVE)
                 } else {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -745,7 +747,7 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                 Button(onClick = vm::download, modifier = Modifier.fillMaxWidth().height(50.dp)) {
                     Text(if (info.playlistCount > 0 && vm.kind != Kind.PHOTO) "Download ${info.playlistCount} videos" else "Download")
                 }
-                if (info.photoCount == 0) {
+                if (info.photoCount == 0 && info.profile == null) {
                     val ctx = LocalContext.current
                     val host = SiteRules.normalizeHost(info.url)
                     if (host != null) {

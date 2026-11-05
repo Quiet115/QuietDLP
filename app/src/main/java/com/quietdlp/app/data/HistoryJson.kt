@@ -37,7 +37,8 @@ object HistoryJson {
                     .put("sponsor", i.sponsor?.encode())
                     .put("chapters", i.chapters.id)
                     .put("followId", i.followId)
-                    .put("fresh", i.fresh),
+                    .put("fresh", i.fresh)
+                    .put("photoLimit", i.photoLimit),
             )
         }
         return arr.toString()
@@ -80,6 +81,7 @@ object HistoryJson {
                     chapters = ChapterMode.fromId(o.optStringOrNull("chapters")),
                     followId = o.optStringOrNull("followId"),
                     fresh = o.optBoolean("fresh", false),
+                    photoLimit = o.optInt("photoLimit", DEFAULT_PHOTO_LIMIT),
                 )
             }.getOrNull()
         }

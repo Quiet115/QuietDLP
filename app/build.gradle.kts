@@ -14,8 +14,8 @@ android {
         applicationId = "com.quietdlp.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 32
-        versionName = "0.4.5"
+        versionCode = 33
+        versionName = "0.4.6"
 
         // Solo arm64: cubre prácticamente todos los móviles actuales y reduce el tamaño.
         ndk { abiFilters += listOf("arm64-v8a") }

@@ -122,11 +122,13 @@ object GalleryDl {
     }
 
     /** Descarga las fotos del enlace en [dir] y devuelve los archivos. Lanza una excepción si no se obtuvo ninguno. */
-    fun download(ctx: Context, id: String, url: String, dir: File): List<File> {
+    fun download(ctx: Context, id: String, url: String, dir: File, limit: Int = 100): List<File> {
         dir.mkdirs()
         // En Instagram, una publicación de fotos puede traer una canción: "merged" la baja directamente como un
         // archivo más (el otro modo usaría yt-dlp, que gallery-dl no tiene aquí).
-        val args = listOf("-D", dir.absolutePath, "--no-mtime", "--range", MAX_ITEMS, "-o", "extractor.instagram.audio=merged") +
+        // limit 0 = todas las fotos del enlace.
+        val range = if (limit > 0) listOf("--range", "1-$limit") else emptyList()
+        val args = listOf("-D", dir.absolutePath, "--no-mtime") + range + listOf("-o", "extractor.instagram.audio=merged") +
             cookiesArgs(ctx) + url
         val (code, out) = exec(ctx, args, id)
         val files = dir.listFiles()

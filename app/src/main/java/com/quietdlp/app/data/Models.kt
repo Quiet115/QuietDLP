@@ -38,6 +38,9 @@ fun resolutionName(p: Int): String = when (p) {
     else -> "${p}p"
 }
 
+/** Fotos que se bajan de un enlace con varias si el usuario no elige otra cantidad. */
+const val DEFAULT_PHOTO_LIMIT = 100
+
 /** Las conversiones de archivos ya descargados se anotan en el historial con una "url" que empieza así. */
 const val CONVERT_URL_PREFIX = "quietdlp-convert:"
 
@@ -79,6 +82,8 @@ data class DownloadItem(
     val followId: String? = null,
     /** Llegó sola de una página seguida y el usuario aún no la ha visto. */
     val fresh: Boolean = false,
+    /** Cuántas fotos se bajan de un enlace con varias (0 = todas). */
+    val photoLimit: Int = DEFAULT_PHOTO_LIMIT,
 ) {
     val savedUri: String? get() = savedUris.firstOrNull()
 

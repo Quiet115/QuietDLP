@@ -12,6 +12,7 @@ import android.widget.Toast
 import com.quietdlp.app.data.AppOrientation
 import com.quietdlp.app.data.PlaylistEntry
 import com.quietdlp.app.data.PlaylistInfo
+import com.quietdlp.app.data.DEFAULT_PHOTO_LIMIT
 import com.quietdlp.app.data.FollowEngine
 import com.quietdlp.app.data.FollowInterval
 import com.quietdlp.app.data.FollowUrl
@@ -22,6 +23,8 @@ import com.quietdlp.app.download.FollowProbe
 import com.quietdlp.app.download.FollowScheduler
 import com.quietdlp.app.download.FollowStore
 import com.quietdlp.app.data.PlaylistProbe
+import com.quietdlp.app.data.ProfilePhoto
+import com.quietdlp.app.data.ProfileRef
 import com.quietdlp.app.data.State
 import com.quietdlp.app.download.Connectivity
 import kotlinx.coroutines.async
@@ -98,7 +101,12 @@ data class MediaInfo(
     val storyboard: Storyboard? = null,
     /** Cuántos capítulos trae el vídeo. */
     val chapterCount: Int = 0,
+    /** El enlace es el perfil de una red social: se puede bajar su foto o sus publicaciones. */
+    val profile: ProfileRef? = null,
 )
+
+/** Qué se baja de un perfil. */
+enum class ProfileWhat { PHOTO, POSTS }
 
 /** Un enlace con varios archivos: se pregunta cuáles bajar antes de empezar (ver [MainViewModel.confirmSelection]). */
 class SelectionPrompt(val title: String, val entries: List<PlaylistEntry>, val quality: Quality)
@@ -902,6 +910,21 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         info = null
         playlist = null
         clearFrames()
+        // Un perfil de una red social no es un vídeo: se ofrece su foto o sus publicaciones, sin pasar por yt-dlp.
+        val profileRef = if (prefs.photosEnabled) ProfilePhoto.parse(u) else null
+        if (profileRef != null) {
+            info = MediaInfo(
+                url = u, title = profileRef.user, thumbnail = null, uploader = profileRef.network,
+                durationSec = 0, heights = emptyList(), profile = profileRef,
+            )
+            profileWhat = ProfileWhat.PHOTO
+            profileBanner = false
+            postsAll = false
+            postsText = DEFAULT_PHOTO_LIMIT.toString()
+            kind = Kind.PHOTO
+            analyzing = false
+            return
+        }
         viewModelScope.launch {
             val probe = async { probePlaylist(u) }
             try {
@@ -1041,8 +1064,29 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         audioBitrate = o.bitrate
     }
 
+    // ── Perfiles de redes sociales ──
+    var profileWhat by mutableStateOf(ProfileWhat.PHOTO)
+    var profileBanner by mutableStateOf(false)
+    var postsText by mutableStateOf(DEFAULT_PHOTO_LIMIT.toString())
+    var postsAll by mutableStateOf(false)
+
+    private fun downloadProfile(ref: ProfileRef) {
+        val photo = Quality(Kind.PHOTO)
+        if (profileWhat == ProfileWhat.PHOTO) {
+            requestDownload(ref.avatarUrl, photo, "${ref.user} (profile)")
+            if (profileBanner && ref.bannerUrl != null) requestDownload(ref.bannerUrl, photo, "${ref.user} (banner)")
+        } else {
+            val limit = if (postsAll) 0 else postsText.toIntOrNull()?.coerceAtLeast(1) ?: DEFAULT_PHOTO_LIMIT
+            DownloadService.enqueue(app, ref.profileUrl, photo, "${ref.user} (posts)", photoLimit = limit)
+        }
+        info = null
+        url = ""
+        error = null
+    }
+
     fun download() {
         val i = info ?: return
+        i.profile?.let { downloadProfile(it); return }
         val q = Quality(kind, height, audioFormat, audioBitrate)
         if (prefs.rememberLast && kind != Kind.PHOTO) {
             prefs.lastKind = kind

@@ -24,6 +24,8 @@ import com.quietdlp.app.MainActivity
 import com.quietdlp.app.Sharing
 import com.quietdlp.app.data.AudioOptions
 import com.quietdlp.app.data.CONVERT_URL_PREFIX
+import com.quietdlp.app.data.DEFAULT_PHOTO_LIMIT
+import com.quietdlp.app.data.ProfilePhoto
 import com.quietdlp.app.data.ConcurrencyGate
 import com.quietdlp.app.data.HistoryGroups
 import com.quietdlp.app.data.ConvertTarget
@@ -82,6 +84,7 @@ class DownloadService : Service() {
         private const val EXTRA_COVER = "cover"
         private const val EXTRA_SPONSOR = "sponsor"
         private const val EXTRA_CHAPTERS = "chapters"
+        private const val EXTRA_PHOTO_LIMIT = "photo_limit"
         private const val EXTRA_SRC_URI = "src_uri"
         private const val EXTRA_SRC_MIME = "src_mime"
         private const val EXTRA_TARGET = "target"
@@ -115,9 +118,11 @@ class DownloadService : Service() {
             cover: Boolean? = null,
             sponsor: SponsorChoice? = null,
             chapters: ChapterMode = ChapterMode.OFF,
+            photoLimit: Int = DEFAULT_PHOTO_LIMIT,
         ) {
             val i = Intent(ctx, DownloadService::class.java)
                 .setAction(ACTION_ENQUEUE)
+                .putExtra(EXTRA_PHOTO_LIMIT, photoLimit)
                 .putExtra(EXTRA_WIFI_ONLY, wifiOnly)
                 .putExtra(EXTRA_SUBS, subs?.encode())
                 .putExtra(EXTRA_TRIM, trim?.encode())
@@ -335,6 +340,7 @@ class DownloadService : Service() {
             cover = if (intent.hasExtra(EXTRA_COVER)) intent.getBooleanExtra(EXTRA_COVER, false) else prefs.coverFor(kind),
             sponsor = SponsorChoice.decode(intent.getStringExtra(EXTRA_SPONSOR)),
             chapters = ChapterMode.fromId(intent.getStringExtra(EXTRA_CHAPTERS)),
+            photoLimit = intent.getIntExtra(EXTRA_PHOTO_LIMIT, DEFAULT_PHOTO_LIMIT),
         )
         DownloadRepository.add(item)
         pending.incrementAndGet()
@@ -752,7 +758,14 @@ class DownloadService : Service() {
         val whole = all - subFiles.toSet()
         // Dividido por capítulos: se guardan los capítulos y no el vídeo entero.
         val chapterFiles = whole.filter { ChapterOptions.isChapterFile(it.name) }
-        val found = if (item.chapters == ChapterMode.SPLIT && chapterFiles.size >= 2) chapterFiles else whole
+        val found = (if (item.chapters == ChapterMode.SPLIT && chapterFiles.size >= 2) chapterFiles else whole).let { f ->
+            // La foto y el banner de un perfil se guardan como "usuario (profile)" y no con el nombre del servidor.
+            if (item.quality.kind == Kind.PHOTO && ProfilePhoto.isProfileTitle(item.title) && f.size == 1) {
+                val safe = item.title.replace(Regex("""[\/:*?"<>|]"""), "_").take(100)
+                val target = File(f[0].parentFile, "$safe.${f[0].extension.ifBlank { "jpg" }}")
+                listOf(if (f[0].renameTo(target)) target else f[0])
+            } else f
+        }
         if (found.isEmpty()) error("yt-dlp finished but produced no file")
 
         // Una publicación de fotos puede traer también su canción (Instagram): se reconoce aunque se llame ".mp4"
@@ -827,7 +840,7 @@ class DownloadService : Service() {
         notifyProgress(item, "Downloading photos…", -1, force = true)
         // Lo que llega de una galería seguida es el enlace directo de cada archivo.
         if (item.followId != null && item.quality.kind == Kind.PHOTO) GalleryDl.fetchDirect(item.id, item.url, dir)
-        else GalleryDl.download(applicationContext, item.id, item.url, dir)
+        else GalleryDl.download(applicationContext, item.id, item.url, dir, item.photoLimit)
     }
 
     /** Si yt-dlp solo bajó audio (típico de una presentación de fotos), comprueba si el enlace tiene imágenes y las baja. */
