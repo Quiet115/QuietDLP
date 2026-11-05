@@ -210,6 +210,9 @@ class DownloadService : Service() {
     private val embeddedCover = ConcurrentHashMap.newKeySet<String>()
     private val coverOff = ConcurrentHashMap.newKeySet<String>()
 
+    /** Descargas que se repiten sin las sesiones guardadas, porque una caducada hacía fallar a la web. */
+    private val cookiesOff = ConcurrentHashMap.newKeySet<String>()
+
     /** Ids puestos en la cola por [handleRequeue] que aún no salieron de ella. */
     private val queuedIds = ConcurrentHashMap.newKeySet<String>()
 
@@ -696,6 +699,12 @@ class DownloadService : Service() {
                     throw e
                 } catch (e: Exception) {
                     if (id in cancelled) throw e
+                    // Una sesión caducada hace que la web responda vacío: se repite una vez sin sesiones (los enlaces públicos sí van).
+                    if (id !in cookiesOff && Errors.isBadSession(e) && CookieStore.mergedPath(applicationContext) != null) {
+                        cookiesOff += id
+                        tmp.listFiles()?.forEach { it.deleteRecursively() }
+                        continue
+                    }
                     // La portada es un extra: si no se puede meter, se repite la descarga sin ella.
                     if (item.cover && id !in coverOff && Errors.isCoverProblem(e)) {
                         coverOff += id
@@ -767,6 +776,7 @@ class DownloadService : Service() {
             id !in embeddedCover
         embeddedCover -= id
         coverOff -= id
+        cookiesOff -= id
         val saved = savedAll.first()
         val title = Errors.cleanTitle(files.first()) +
             if (files.size > 1) " (+${files.size - 1} more)" else ""
@@ -847,7 +857,7 @@ class DownloadService : Service() {
         r.addOption("--newline")
         r.addOption("--concurrent-fragments", 4)
         // Sesiones guardadas por el usuario. yt-dlp solo envía cada cookie a su propio sitio.
-        CookieStore.mergedPath(applicationContext)?.let { r.addOption("--cookies", it) }
+        if (item.id !in cookiesOff) CookieStore.mergedPath(applicationContext)?.let { r.addOption("--cookies", it) }
 
         // Solo se baja ese trozo. El corte exacto es obligatorio: sin él, el audio salía del doble de largo.
         item.trim?.let { t ->

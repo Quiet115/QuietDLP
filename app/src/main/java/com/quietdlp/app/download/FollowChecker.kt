@@ -42,13 +42,19 @@ object FollowChecker {
     private fun ensureEngine(ctx: Context) = runBlocking { Engine.ensureReady(ctx.applicationContext) }
 
     private fun listYtDlp(ctx: Context, url: String, max: Int): com.quietdlp.app.data.PlaylistInfo? {
-        val req = YoutubeDLRequest(url).apply {
+        fun request(cookies: Boolean) = YoutubeDLRequest(url).apply {
             addOption("--flat-playlist")
             addOption("-J")
             addOption("--playlist-end", max)
-            CookieStore.mergedPath(ctx)?.let { addOption("--cookies", it) }
+            if (cookies) CookieStore.mergedPath(ctx)?.let { addOption("--cookies", it) }
         }
-        return PlaylistProbe.parseForFollow(YoutubeDL.execute(req).out)
+        val out = try {
+            YoutubeDL.execute(request(true)).out
+        } catch (t: Exception) {
+            // Una sesión guardada caducada hace fallar a algunas webs: se repite sin sesiones.
+            if (Errors.isBadSession(t)) YoutubeDL.execute(request(false)).out else throw t
+        }
+        return PlaylistProbe.parseForFollow(out)
     }
 
     private fun hostOf(url: String): String =

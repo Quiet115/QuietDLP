@@ -57,10 +57,19 @@ object Errors {
         return raw.lines().lastOrNull { it.contains("ERROR", ignoreCase = true) } ?: raw
     }
 
+    /**
+     * true si yt-dlp recibió una respuesta vacía y no pudo leerla ("Failed to parse JSON ... Expecting value"). Pasa, por
+     * ejemplo, cuando la sesión guardada de la web caducó: sin ella el mismo enlace funciona.
+     */
+    fun isBadSession(t: Throwable): Boolean {
+        val l = errorLineOf(t).lowercase()
+        return "failed to parse json" in l && "expecting value" in l
+    }
+
     /** true si el fallo se debe a que la web exige una sesión iniciada (o la guardada caducó). */
     fun isLoginRequired(t: Throwable): Boolean {
         val l = errorLineOf(t).lowercase()
-        return "no longer valid" in l || "expired" in l && "cookie" in l ||
+        return isBadSession(t) || "no longer valid" in l || "expired" in l && "cookie" in l ||
             "available to everyone" in l || "certain audiences" in l || "sign in" in l ||
             "log in" in l || "login" in l || "private" in l || "cookies" in l ||
             "empty media response" in l || "age" in l && "restrict" in l

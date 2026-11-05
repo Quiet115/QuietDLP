@@ -35,4 +35,14 @@ class ErrorsFriendlyTest {
         val m = Errors.friendly(err("ERROR: [youtube] abc: Sign in to confirm you're not a bot"))
         assertEquals("This content requires signing in.", m)
     }
+
+    @Test
+    fun anEmptyResponseIsTakenAsAnExpiredSessionAndAsksToSignInAgain() {
+        val e = err("ERROR: [Instagram] DfSF8i5xFdu: Failed to parse JSON (caused by JSONDecodeError(\"Expecting value in '': line 1 column 1 (char 0)\")); please report this issue")
+        assertTrue(Errors.isBadSession(e))
+        assertTrue(Errors.isLoginRequired(e))
+        assertEquals("This content requires signing in.", Errors.friendly(e))
+        assertFalse(Errors.isBadSession(err("ERROR: [site] id: Failed to parse JSON (caused by JSONDecodeError(\"Unterminated string\"))")))
+        assertFalse(Errors.isBadSession(err("ERROR: HTTP Error 404")))
+    }
 }

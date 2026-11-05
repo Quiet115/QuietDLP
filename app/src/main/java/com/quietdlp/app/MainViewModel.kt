@@ -843,14 +843,20 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     /** Lee la lista de un enlace sin descargar nada. null si no es una lista de varios archivos o no se pudo leer. */
     private suspend fun probePlaylist(u: String): PlaylistInfo? = withContext(Dispatchers.IO) {
         runCatching {
-            val req = YoutubeDLRequest(u).apply {
+            fun request(cookies: Boolean) = YoutubeDLRequest(u).apply {
                 addOption("--flat-playlist")
                 addOption("-J")
                 addOption("--playlist-end", PlaylistProbe.MAX_ENTRIES)
                 if (UrlUtils.isSingleYoutubeVideo(u)) addOption("--no-playlist")
-                CookieStore.mergedPath(app)?.let { addOption("--cookies", it) }
+                if (cookies) CookieStore.mergedPath(app)?.let { addOption("--cookies", it) }
             }
-            PlaylistProbe.parse(YoutubeDL.execute(req).out, u)
+            val out = try {
+                YoutubeDL.execute(request(true)).out
+            } catch (t: Exception) {
+                // Una sesión guardada caducada hace fallar a algunas webs: se repite sin sesiones.
+                if (Errors.isBadSession(t)) YoutubeDL.execute(request(false)).out else throw t
+            }
+            PlaylistProbe.parse(out, u)
         }.getOrNull()
     }
 
@@ -876,16 +882,23 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             val probe = async { probePlaylist(u) }
             try {
                 Engine.ensureReady(app)
-                val req = YoutubeDLRequest(u).apply {
+                fun request(cookies: Boolean) = YoutubeDLRequest(u).apply {
                     addOption("--no-playlist")
                     // Publicaciones con varios vídeos: basta el primero para mostrar título y calidades.
                     addOption("--playlist-items", "1")
                     // Se lee el JSON a mano (y no con getInfo) porque getInfo no trae los subtítulos.
                     addOption("--dump-json")
-                    CookieStore.mergedPath(app)?.let { addOption("--cookies", it) }
+                    if (cookies) CookieStore.mergedPath(app)?.let { addOption("--cookies", it) }
                 }
-                val vi = withContext(Dispatchers.IO) { MediaProbe.parse(YoutubeDL.execute(req).out) }
-                    ?: error("Unable to parse video information")
+                val vi = withContext(Dispatchers.IO) {
+                    val out = try {
+                        YoutubeDL.execute(request(true)).out
+                    } catch (t: Exception) {
+                        // Una sesión guardada caducada hace fallar a algunas webs: se repite sin sesiones.
+                        if (Errors.isBadSession(t)) YoutubeDL.execute(request(false)).out else throw t
+                    }
+                    MediaProbe.parse(out)
+                } ?: error("Unable to parse video information")
                 val heights = vi.heights
                 val list = probe.await()
                 playlist = list
