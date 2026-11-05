@@ -2,23 +2,21 @@
 
 Open-source video, audio and photo downloader for Android. Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) for video and audio and [gallery-dl](https://github.com/mikf/gallery-dl) for photos and galleries.
 
-Early version (0.4). Free and open source (GPL-3.0).
+Early version (0.4). Free and open source.
 
 ## What it does
 
 - **Share and done.** Tap *Share* on a video and pick QuietDLP. It downloads in the background without opening the app.
-- **No watermarks**, when the site offers a clean version.
-- **Photos and galleries** when a link has no video.
-- **Quality of your choice:** best, 1080p, 1440p, 2160p…, or audio only (M4A or MP3).
+- **No watermarks**, when the site offers a clean version, and **photos and galleries** when a link has no video.
+- **Quality of your choice:** best, 1080p, 1440p, 2160p…, or audio only (M4A or MP3). Pick a default for Share and copied links, or ask each time, and set rules per website (for example, music sites always audio).
 - **Its own album:** videos and photos go to `DCIM/QuietDLP`; audio goes to `Music/QuietDLP`. The folder name and location can be changed.
-- **Default download** for Share and copied links: best video, 1080p, 720p, music (M4A or MP3), or ask each time. Rules per website (for example, music sites always audio).
 - **Playlists and several links** become one group. Up to 5 downloads at once, with a Wi-Fi only option.
 - **Subtitles:** pick the language and save them inside the video (MP4 or MKV) or as a `.srt` file.
 - **Trim:** download only a part of a video or song, with frames to see where you cut.
 - **Music** is named "Artist - Title" and tagged with title, artist and album, with a cover image when the site has one.
 - **Convert** a downloaded file to another format.
 - **Advanced:** SponsorBlock (remove or mark sponsor parts on YouTube), chapters (keep them or one file per chapter) and file name templates.
-- **Follow a page:** channels, playlists and photo galleries. It checks on its own and downloads only what is new, or just marks it "New". Checks run in the background; Android doesn't allow starting a download from there, so on some phones new items start when you open the app.
+- **Follow a page:** channels, playlists and photo galleries. It checks on its own and downloads only what is new, or just marks it "New". Android doesn't allow starting a download from the background, so on some phones new items start when you open the app.
 - **Site keys:** some photo sites need your own key. Add it in Settings; it stays on your phone and is not in backups.
 - **Backup** of your settings, history and followed pages.
 - **Simple and Advanced mode**, and color palettes: dark, colorful, light, wallpaper colors, or your own.
@@ -29,7 +27,7 @@ Early version (0.4). Free and open source (GPL-3.0).
 
 ## Check your copy
 
-QuietDLP is only published here, on GitHub Releases. It has no ads and no other website. If you got the app anywhere else, it may be a copy with something added.
+QuietDLP is only published here, on GitHub Releases, and has no other website. If you got the app anywhere else, it may be a copy with something added.
 
 Every official release is signed with the same key. In the app, open Settings, then About, then Official source, and compare the signature with this one:
 
@@ -86,7 +84,7 @@ Built on [youtubedl-android](https://github.com/yausername/youtubedl-android) (y
 ## Limits
 
 - arm64 only.
-- Private or restricted content may require a session, and may still be unavailable.
+- Private or restricted content may stay unavailable even with a session.
 - Up to 100 photos per link.
 - When a site changes, yt-dlp and gallery-dl take a while to catch up. Updating usually fixes it.
 - App stores tend to reject this kind of app. It is distributed through GitHub.
