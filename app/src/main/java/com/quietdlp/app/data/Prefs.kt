@@ -183,6 +183,11 @@ class Prefs(context: Context) {
         get() = sp.getString("site_key", "") ?: ""
         set(v) = sp.edit().putString("site_key", v).apply()
 
+    /** Mostrar en "Compartir" la entrada "QuietDLP options", que abre la app para elegir los ajustes. */
+    var shareOptions: Boolean
+        get() = sp.getBoolean("share_options", true)
+        set(v) = sp.edit().putBoolean("share_options", v).apply()
+
     /** Revisar las páginas seguidas (y bajar lo nuevo) solo con Wi-Fi. */
     var followWifiOnly: Boolean
         get() = sp.getBoolean("follow_wifi", true)

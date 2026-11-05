@@ -50,6 +50,20 @@
             </intent-filter>
         </activity>
 
+        <!-- Segunda entrada en "Compartir": abre la app para elegir los ajustes antes de descargar. Se puede quitar en Ajustes. -->
+        <activity-alias
+            android:name=".ShareOptionsAlias"
+            android:enabled="true"
+            android:exported="true"
+            android:label="@string/share_options_label"
+            android:targetActivity=".ShareReceiverActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+
         <activity
             android:name=".LoginActivity"
             android:exported="false" />

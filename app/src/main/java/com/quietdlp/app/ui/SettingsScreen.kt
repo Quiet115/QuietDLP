@@ -131,6 +131,11 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     if (vm.rememberLast) "Links opened in the app start with your last choice." else "Off. Starts from the default.",
                     vm.rememberLast, vm::changeRememberLast,
                 )
+                SwitchRow(
+                    "Share option with settings",
+                    if (vm.shareOptions) "Share shows \"QuietDLP options\" too." else "Off.",
+                    vm.shareOptions, vm::changeShareOptions,
+                )
                 SwitchRow("Offer copied links", "When you open the app with a link copied.", vm.clipboardOffer, vm::changeClipboardOffer)
                 SwitchRow(
                     "Photos and galleries",

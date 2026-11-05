@@ -25,6 +25,8 @@ class ShareReceiverActivity : Activity() {
         // Algunas apps mandan el texto como Spanned (CharSequence), no como String.
         val shared = intent?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() ?: intent?.dataString
         val url = UrlUtils.extract(shared)
+        // La entrada "QuietDLP options" siempre abre la app para elegir; la otra descarga con lo de por defecto.
+        val chooseFirst = intent?.component?.className?.endsWith("ShareOptionsAlias") == true
         val quality = url?.let { Prefs(this).qualityFor(it) }
 
         when {
@@ -33,8 +35,8 @@ class ShareReceiverActivity : Activity() {
                 close()
             }
 
-            // "Preguntar cada vez": se abre la app para elegir.
-            quality == null -> {
+            // "Preguntar cada vez" o la entrada con ajustes: se abre la app para elegir.
+            quality == null || chooseFirst -> {
                 startActivity(
                     Intent(this, MainActivity::class.java)
                         .putExtra(MainActivity.EXTRA_URL, url)

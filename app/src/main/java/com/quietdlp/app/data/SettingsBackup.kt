@@ -31,7 +31,7 @@ object SettingsBackup {
         "palette" to 's', "custom_palettes" to 's', "advanced" to 'b', "folder_name" to 's', "orientation" to 's',
         "support_card" to 'b', "max_parallel" to 'i', "wifi_only" to 'b', "ask_multi" to 'b', "battery_hint_off" to 'b',
         "subs_on" to 'b', "sub_langs" to 's', "sub_mode" to 's', "cover_audio" to 'b', "cover_video" to 'b', "music_names" to 'b', "name_template" to 's', "sponsor_mode" to 's', "sponsor_cats" to 's', "chapter_mode" to 's',
-        "site_rules" to 's', "follow_wifi" to 'b',
+        "site_rules" to 's', "follow_wifi" to 'b', "share_options" to 'b',
     )
 
     private fun matches(type: Char, v: Any?): Boolean = when (type) {

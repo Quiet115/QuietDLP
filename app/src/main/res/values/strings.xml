@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">QuietDLP</string>
     <string name="share_label">QuietDLP</string>
+    <string name="share_options_label">QuietDLP options</string>
 </resources>

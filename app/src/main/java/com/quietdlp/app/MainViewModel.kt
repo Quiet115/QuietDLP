@@ -2,6 +2,8 @@ package com.quietdlp.app
 
 import android.app.Application
 import android.content.ClipboardManager
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.content.Context
 import android.os.Build
@@ -608,6 +610,26 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ── Segunda entrada de "Compartir" ──
+    var shareOptions by mutableStateOf(prefs.shareOptions)
+        private set
+
+    fun changeShareOptions(v: Boolean) {
+        shareOptions = v
+        prefs.shareOptions = v
+        applyShareOptions(v)
+    }
+
+    private fun applyShareOptions(on: Boolean) {
+        runCatching {
+            app.packageManager.setComponentEnabledSetting(
+                ComponentName(app, "com.quietdlp.app.ShareOptionsAlias"),
+                if (on) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                PackageManager.DONT_KILL_APP,
+            )
+        }
+    }
+
     // ── Fotos (gallery-dl) ──
     var photosEnabled by mutableStateOf(prefs.photosEnabled)
         private set
@@ -799,6 +821,8 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     init {
+        // Tras restaurar una copia, la entrada de Compartir tiene que coincidir con el ajuste.
+        applyShareOptions(prefs.shareOptions)
         FollowStore.init(app)
         FollowScheduler.update(app)
     }
