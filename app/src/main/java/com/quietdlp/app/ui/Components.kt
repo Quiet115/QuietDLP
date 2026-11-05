@@ -50,11 +50,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.quietdlp.app.Strings
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.State
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.quietdlp.app.R
 
 /** Logo provisional: flecha de bajada sobre una bandeja, en un cuadrado con degradado de la paleta. */
 @Composable
@@ -98,8 +100,8 @@ fun ModeSwitch(advanced: Boolean, onChange: (Boolean) -> Unit) {
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .padding(3.dp),
     ) {
-        Segment("Simple", !advanced) { onChange(false) }
-        Segment("Advanced", advanced) { onChange(true) }
+        Segment(Strings.get(R.string.components_simple), !advanced) { onChange(false) }
+        Segment(Strings.get(R.string.components_advanced), advanced) { onChange(true) }
     }
 }
 
@@ -268,7 +270,7 @@ fun PaletteSwatch(spec: PaletteSpec, selected: Boolean, onClick: () -> Unit) {
             )
         }
         Text(
-            spec.name,
+            Strings.tr(spec.name),
             style = MaterialTheme.typography.labelMedium,
             color = if (spec.dark) Color(0xFFE7EBF1) else Color(0xFF14181F),
             maxLines = 1,

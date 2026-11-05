@@ -53,8 +53,12 @@ import com.quietdlp.app.data.FollowedPage
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.QualityLevel
+import com.quietdlp.app.download.Errors
 import com.quietdlp.app.download.FollowProbe
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
+import com.quietdlp.app.R
+import com.quietdlp.app.Strings
 
 /** Cuántas novedades tiene la página: las que esperan sin bajar y las que llegaron y el usuario aún no ha visto. */
 fun followNewCount(page: FollowedPage, downloads: List<DownloadItem>): Int =
@@ -64,14 +68,25 @@ fun followNewCount(page: FollowedPage, downloads: List<DownloadItem>): Int =
 fun followPagesWithNew(pages: List<FollowedPage>, downloads: List<DownloadItem>): Int =
     pages.count { followNewCount(it, downloads) > 0 }
 
+/** "1 día", "3 días", "6 h", "30 min", en el idioma elegido (la misma cuenta que [FollowInterval.label]). */
+private fun intervalLabel(days: Double): String {
+    val d = FollowInterval.clamp(days)
+    if (d >= 1.0) {
+        val n = d.roundToInt()
+        return if (n == 1) Strings.get(R.string.interval_one_day) else Strings.get(R.string.interval_days, n)
+    }
+    val minutes = (d * 24 * 60).roundToInt()
+    return if (minutes >= 60) Strings.get(R.string.interval_hours, (minutes / 60.0).roundToInt()) else Strings.get(R.string.interval_minutes, minutes)
+}
+
 private fun ago(ms: Long, now: Long): String {
-    if (ms <= 0) return "Not checked yet"
+    if (ms <= 0) return Strings.get(R.string.follow_ui_not_checked_yet)
     val min = ((now - ms) / 60_000).coerceAtLeast(0)
     return when {
-        min < 1 -> "Checked just now"
-        min < 60 -> "Checked $min min ago"
-        min < 60 * 24 -> "Checked ${min / 60} h ago"
-        else -> "Checked ${min / (60 * 24)} d ago"
+        min < 1 -> Strings.get(R.string.follow_ui_checked_just_now)
+        min < 60 -> Strings.get(R.string.follow_ui_checked_min_ago, min)
+        min < 60 * 24 -> Strings.get(R.string.follow_ui_checked_h_ago, min / 60)
+        else -> Strings.get(R.string.follow_ui_checked_d_ago, min / (60 * 24))
     }
 }
 
@@ -100,7 +115,7 @@ fun FollowingTab(
             if (pages.isEmpty()) {
                 item {
                     Text(
-                        "Follow a channel, a playlist or a gallery. What's new is downloaded for you.",
+                        Strings.get(R.string.follow_ui_follow_a_channel_a_playlist),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -126,13 +141,13 @@ private fun AddFollowCard(vm: MainViewModel) {
                 value = vm.followUrl,
                 onValueChange = { vm.followUrl = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Link of a page to follow") },
+                placeholder = { Text(Strings.get(R.string.follow_ui_link_of_a_page_to)) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             )
             Button(onClick = vm::startFollow, enabled = vm.followUrl.isNotBlank() && !vm.followProbing) {
-                Text(if (vm.followProbing) "Looking…" else "Follow")
+                Text(if (vm.followProbing) Strings.get(R.string.follow_ui_looking) else Strings.get(R.string.follow_ui_follow))
             }
             if (vm.followProbing) LinearProgressIndicator(Modifier.fillMaxWidth())
             vm.followError?.let {
@@ -159,42 +174,42 @@ private fun FollowCard(vm: MainViewModel, page: FollowedPage, news: Int, hasFile
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(page.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
-                        "${ago(page.lastCheck, now)} · every ${FollowInterval.label(page.days)}",
+                        Strings.get(R.string.follow_ui_every, ago(page.lastCheck, now), intervalLabel(page.days)),
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
                 }
-                if (news > 0) StatusPill(if (page.auto && page.pending.isEmpty()) "New" else "$news new", Tone.NEW)
+                if (news > 0) StatusPill(if (page.auto && page.pending.isEmpty()) Strings.get(R.string.group_ui_new) else "$news new", Tone.NEW)
                 Column {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = Strings.get(R.string.main_screen_more)) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("Change time between checks") }, onClick = { menu = false; intervalDialog = true })
-                        DropdownMenuItem(text = { Text("Stop following") }, onClick = { menu = false; confirmRemove = true })
+                        DropdownMenuItem(text = { Text(Strings.get(R.string.follow_ui_change_time_between_checks)) }, onClick = { menu = false; intervalDialog = true })
+                        DropdownMenuItem(text = { Text(Strings.get(R.string.follow_ui_stop_following)) }, onClick = { menu = false; confirmRemove = true })
                     }
                 }
             }
             page.lastError?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = scheme.error, modifier = Modifier.padding(end = 10.dp))
+                Text(Errors.localize(it), style = MaterialTheme.typography.bodySmall, color = scheme.error, modifier = Modifier.padding(end = 10.dp))
             }
             Text(
-                (if (page.engine == FollowEngine.GALLERY) "Photos" else page.quality.label()) +
-                    if (page.pending.isNotEmpty() && !page.auto) " · ${page.pending.size} waiting" else "",
+                (if (page.engine == FollowEngine.GALLERY) Strings.get(R.string.main_screen_photos) else Strings.tr(page.quality.label())) +
+                    if (page.pending.isNotEmpty() && !page.auto) " · " + Strings.get(R.string.follow_waiting, page.pending.size) else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
             )
             Row(Modifier.padding(end = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Download new ones", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Text(Strings.get(R.string.follow_ui_download_new_ones), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 Switch(checked = page.auto, onCheckedChange = { vm.setFollowAuto(page.id, it) })
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(onClick = { vm.checkNow(page.id) }, enabled = !checking) {
                     if (checking) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                    else Text("Check now")
+                    else Text(Strings.get(R.string.settings_screen_check_now))
                 }
                 if (page.pending.isNotEmpty() && !page.auto) {
-                    Button(onClick = { vm.downloadPending(page.id) }) { Text("Download ${page.pending.size}") }
+                    Button(onClick = { vm.downloadPending(page.id) }) { Text(Strings.get(R.string.group_ui_download, page.pending.size)) }
                 }
-                if (hasFiles) TextButton(onClick = { onOpenGroup(page.groupId) }) { Text("Open") }
+                if (hasFiles) TextButton(onClick = { onOpenGroup(page.groupId) }) { Text(Strings.get(R.string.group_ui_open)) }
             }
         }
     }
@@ -202,10 +217,10 @@ private fun FollowCard(vm: MainViewModel, page: FollowedPage, news: Int, hasFile
     if (confirmRemove) {
         AlertDialog(
             onDismissRequest = { confirmRemove = false },
-            title = { Text("Stop following?") },
-            text = { Text("What you already downloaded stays.") },
-            confirmButton = { TextButton(onClick = { vm.removeFollow(page.id); confirmRemove = false }) { Text("Stop") } },
-            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Cancel") } },
+            title = { Text(Strings.get(R.string.follow_ui_stop_following_2)) },
+            text = { Text(Strings.get(R.string.follow_ui_what_you_already_downloaded_stays)) },
+            confirmButton = { TextButton(onClick = { vm.removeFollow(page.id); confirmRemove = false }) { Text(Strings.get(R.string.follow_ui_stop)) } },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(Strings.get(R.string.settings_screen_cancel)) } },
         )
     }
 }
@@ -216,7 +231,7 @@ private fun IntervalDialog(current: Double, onDismiss: () -> Unit, onSave: (Doub
     val parsed = FollowInterval.parse(text)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Check every") },
+        title = { Text(Strings.get(R.string.follow_ui_check_every)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -227,14 +242,14 @@ private fun IntervalDialog(current: Double, onDismiss: () -> Unit, onSave: (Doub
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 Text(
-                    if (parsed == null) "Type a number." else "Every ${FollowInterval.label(parsed)}. Under 1 day you can use decimals (0.25 = 6 h).",
+                    if (parsed == null) Strings.get(R.string.follow_ui_type_a_number) else Strings.get(R.string.follow_ui_every_under_1_day_you, intervalLabel(parsed)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { parsed?.let(onSave) }, enabled = parsed != null) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { parsed?.let(onSave) }, enabled = parsed != null) { Text(Strings.get(R.string.settings_screen_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.get(R.string.settings_screen_cancel)) } },
     )
 }
 
@@ -255,44 +270,44 @@ private fun FollowSetupDialog(vm: MainViewModel, probe: FollowProbe) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "What's there now is marked as seen. Only new things are downloaded.",
+                    Strings.get(R.string.follow_ui_what_s_there_now_is),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (probe.engine == FollowEngine.YTDLP) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QuietChip(kind == Kind.VIDEO, { kind = Kind.VIDEO }, "Video")
-                        QuietChip(kind == Kind.AUDIO, { kind = Kind.AUDIO }, "Audio")
+                        QuietChip(kind == Kind.VIDEO, { kind = Kind.VIDEO }, Strings.get(R.string.settings_screen_video))
+                        QuietChip(kind == Kind.AUDIO, { kind = Kind.AUDIO }, Strings.get(R.string.group_ui_audio))
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QualityLevel.entries.forEach { QuietChip(level == it, { level = it }, it.label) }
+                        QualityLevel.entries.forEach { QuietChip(level == it, { level = it }, Strings.tr(it.label)) }
                     }
                 } else {
-                    Text("Photos and videos of the page.", style = MaterialTheme.typography.bodyMedium)
+                    Text(Strings.get(R.string.follow_ui_photos_and_videos_of_the), style = MaterialTheme.typography.bodyMedium)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Download new ones", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    Text(Strings.get(R.string.follow_ui_download_new_ones), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     Switch(checked = auto, onCheckedChange = { auto = it })
                 }
                 OutlinedTextField(
                     value = daysText,
                     onValueChange = { daysText = it },
-                    label = { Text("Check every (days)") },
-                    supportingText = { Text(if (days == null) "Type a number." else "Every ${FollowInterval.label(days)}.") },
+                    label = { Text(Strings.get(R.string.follow_ui_check_every_days)) },
+                    supportingText = { Text(if (days == null) Strings.get(R.string.follow_ui_type_a_number) else Strings.get(R.string.follow_ui_every_2, intervalLabel(days))) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 )
                 OutlinedTextField(
                     value = latestText,
                     onValueChange = { latestText = it.filter(Char::isDigit).take(3) },
-                    label = { Text("Also download the latest") },
+                    label = { Text(Strings.get(R.string.follow_ui_also_download_the_latest)) },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
                 if ((latest ?: 0) > 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = duplicates, onCheckedChange = { duplicates = it })
-                        Text("Download all, even ones I already have", style = MaterialTheme.typography.bodyMedium)
+                        Text(Strings.get(R.string.follow_ui_download_all_even_ones_i), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -301,8 +316,8 @@ private fun FollowSetupDialog(vm: MainViewModel, probe: FollowProbe) {
             TextButton(
                 onClick = { vm.confirmFollow(kind, level, auto, days ?: FollowInterval.DEFAULT_DAYS, latest ?: 0, duplicates) },
                 enabled = days != null,
-            ) { Text("Follow") }
+            ) { Text(Strings.get(R.string.follow_ui_follow)) }
         },
-        dismissButton = { TextButton(onClick = vm::dismissFollowSetup) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = vm::dismissFollowSetup) { Text(Strings.get(R.string.settings_screen_cancel)) } },
     )
 }

@@ -1,5 +1,7 @@
 package com.quietdlp.app.download
 
+import com.quietdlp.app.R
+import com.quietdlp.app.Strings
 import java.io.File
 
 object UrlUtils {
@@ -142,6 +144,42 @@ object Errors {
     const val ENGINE_HINT = "Update the engine"
 
     fun needsEngineUpdate(message: String?): Boolean = message != null && ENGINE_HINT in message
+
+    /** El mensaje amable de [friendly] ya en el idioma elegido. */
+    fun friendlyText(t: Throwable): String = localize(friendly(t))
+
+    /**
+     * Los mensajes se guardan en inglés (así se reconocen, p. ej. [needsEngineUpdate]) y se traducen al mostrarlos: lo que
+     * no está en la lista se deja como está.
+     */
+    fun localize(message: String): String {
+        val tryUpdating = " Try updating yt-dlp in Settings."
+        if (message.endsWith(tryUpdating)) {
+            return localizeKnown(message.removeSuffix(tryUpdating)) + " " + Strings.get(R.string.try_updating_ytdlp)
+        }
+        return localizeKnown(message)
+    }
+
+    private fun localizeKnown(message: String): String = when (message) {
+        "This link isn't supported." -> Strings.get(R.string.err_unsupported_link)
+        "This content requires signing in." -> Strings.get(R.string.err_requires_signing_in)
+        "No internet connection." -> Strings.get(R.string.err_no_internet)
+        "The video isn't available." -> Strings.get(R.string.err_video_unavailable)
+        "The site blocked the download. $ENGINE_HINT, then retry." -> Strings.get(R.string.err_site_blocked)
+        "Couldn't read this page. $ENGINE_HINT, then retry." -> Strings.get(R.string.err_cant_read_page)
+        "The page wasn't found." -> Strings.get(R.string.err_page_not_found)
+        "Not enough space on the phone." -> Strings.get(R.string.err_no_space)
+        "Couldn't create the folder" -> Strings.get(R.string.err_create_folder)
+        "Couldn't create the file in the chosen folder" -> Strings.get(R.string.err_create_file_chosen)
+        "Couldn't write the file" -> Strings.get(R.string.err_write_file)
+        "Couldn't create the file in storage" -> Strings.get(R.string.err_create_file_storage)
+        "The file is too large" -> Strings.get(R.string.err_file_too_large)
+        "File check failed (SHA-256 mismatch)" -> Strings.get(R.string.err_sha_mismatch)
+        "The downloaded file isn't a valid APK." -> Strings.get(R.string.err_not_apk)
+        "The downloaded file isn't QuietDLP." -> Strings.get(R.string.err_not_quietdlp)
+        "You already have this version or a newer one." -> Strings.get(R.string.err_already_latest)
+        else -> message
+    }
 
     fun cleanTitle(file: File): String = file.nameWithoutExtension.ifBlank { "Download" }
 }

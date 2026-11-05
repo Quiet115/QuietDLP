@@ -120,6 +120,8 @@ import com.quietdlp.app.download.DownloadRepository
 import com.quietdlp.app.download.FollowStore
 import com.quietdlp.app.download.UrlUtils
 import com.quietdlp.app.update.AppUpdater
+import com.quietdlp.app.R
+import com.quietdlp.app.Strings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -171,13 +173,13 @@ fun MainScreen(vm: MainViewModel) {
                 Column {
                     MainTopBar(vm) { showSettings = true }
                     TabRow(selectedTabIndex = tab) {
-                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Downloads") })
+                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(Strings.get(R.string.main_screen_downloads)) })
                         Tab(
                             selected = tab == 1,
                             onClick = { tab = 1 },
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("Following")
+                                    Text(Strings.get(R.string.main_screen_following))
                                     if (withNew > 0) Badge { Text("$withNew") }
                                 }
                             },
@@ -283,11 +285,11 @@ private fun LazyListScope.historySection(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Downloads", style = MaterialTheme.typography.titleMedium)
+                    Text(Strings.get(R.string.main_screen_downloads), style = MaterialTheme.typography.titleMedium)
                     if (rows.isNotEmpty()) StatusPill("${rows.size}", Tone.NEUTRAL)
                 }
                 if (visible.any { !it.isActive }) {
-                    TextButton(onClick = vm::clearFinished) { Text("Clear list") }
+                    TextButton(onClick = vm::clearFinished) { Text(Strings.get(R.string.main_screen_clear_list)) }
                 }
             }
         }
@@ -297,17 +299,17 @@ private fun LazyListScope.historySection(
             value = vm.searchQuery,
             onValueChange = { vm.searchQuery = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search history") },
+            placeholder = { Text(Strings.get(R.string.main_screen_search_history)) },
             singleLine = true,
             shape = MaterialTheme.shapes.medium,
             trailingIcon = {
-                if (vm.searchQuery.isNotEmpty()) TextButton(onClick = { vm.searchQuery = "" }) { Text("Clear") }
+                if (vm.searchQuery.isNotEmpty()) TextButton(onClick = { vm.searchQuery = "" }) { Text(Strings.get(R.string.settings_screen_clear)) }
             },
         )
     }
     if (rows.isEmpty() && vm.searchQuery.isEmpty()) item { EmptyState() }
     else if (rows.isEmpty()) item {
-        Text("No matches.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(Strings.get(R.string.main_screen_no_matches), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     items(rows, key = { it.key }) { row ->
         when (row) {
@@ -340,11 +342,11 @@ private fun MainTopBar(vm: MainViewModel, onSettings: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         QuietLogo(32.dp)
-        Text("QuietDLP", style = MaterialTheme.typography.titleLarge, maxLines = 1)
+        Text(Strings.get(R.string.settings_screen_quietdlp_2), style = MaterialTheme.typography.titleLarge, maxLines = 1)
         Spacer(Modifier.weight(1f))
         ModeSwitch(vm.advanced, vm::changeAdvanced)
         IconButton(onClick = onSettings) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings")
+            Icon(Icons.Default.Settings, contentDescription = Strings.get(R.string.settings_screen_settings))
         }
     }
 }
@@ -357,9 +359,9 @@ private fun EmptyState() {
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         QuietLogo(72.dp)
-        Text("Nothing here yet", style = MaterialTheme.typography.titleMedium)
+        Text(Strings.get(R.string.main_screen_nothing_here_yet), style = MaterialTheme.typography.titleMedium)
         Text(
-            "Paste a link, or use Share and pick QuietDLP.",
+            Strings.get(R.string.main_screen_paste_a_link_or_use),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -381,9 +383,9 @@ private fun SupportCard() {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Buy me a kebab", style = MaterialTheme.typography.titleSmall)
+                Text(Strings.get(R.string.main_screen_buy_me_a_kebab), style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "QuietDLP is free. A kebab is \$5.",
+                    Strings.get(R.string.main_screen_quietdlp_is_free_a_kebab),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -392,8 +394,8 @@ private fun SupportCard() {
                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(onClick = { open(Links.DONATE_URL) }) { Text("Ko-fi") }
-                if (Links.PAYPAL_URL.isNotBlank()) OutlinedButton(onClick = { open(Links.PAYPAL_URL) }) { Text("PayPal") }
+                Button(onClick = { open(Links.DONATE_URL) }) { Text(Strings.get(R.string.main_screen_ko_fi)) }
+                if (Links.PAYPAL_URL.isNotBlank()) OutlinedButton(onClick = { open(Links.PAYPAL_URL) }) { Text(Strings.get(R.string.main_screen_paypal)) }
             }
         }
     }
@@ -408,15 +410,15 @@ private fun SelectionBar(vm: MainViewModel, visible: List<DownloadItem>) {
     if (askDelete) {
         AlertDialog(
             onDismissRequest = { askDelete = false },
-            title = { Text("Remove ${chosen.size} ${if (chosen.size == 1) "item" else "items"}") },
-            text = { Text("Remove them from the list only, or delete the files too.") },
+            title = { Text(if (chosen.size == 1) Strings.get(R.string.remove_one_item) else Strings.get(R.string.remove_many_items, chosen.size)) },
+            text = { Text(Strings.get(R.string.group_ui_remove_them_from_the_list)) },
             confirmButton = {
-                TextButton(onClick = { askDelete = false; vm.deleteMany(chosen, deleteFiles = false) }) { Text("List only") }
+                TextButton(onClick = { askDelete = false; vm.deleteMany(chosen, deleteFiles = false) }) { Text(Strings.get(R.string.group_ui_list_only)) }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { askDelete = false }) { Text("Cancel") }
-                    TextButton(onClick = { askDelete = false; vm.deleteMany(chosen, deleteFiles = true) }) { Text("Delete files too") }
+                    TextButton(onClick = { askDelete = false }) { Text(Strings.get(R.string.settings_screen_cancel)) }
+                    TextButton(onClick = { askDelete = false; vm.deleteMany(chosen, deleteFiles = true) }) { Text(Strings.get(R.string.group_ui_delete_files_too)) }
                 }
             },
         )
@@ -428,16 +430,16 @@ private fun SelectionBar(vm: MainViewModel, visible: List<DownloadItem>) {
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text("${chosen.size} selected", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-        TextButton(onClick = { vm.selectAll(visible.filter { !it.isActive }.map { it.id }) }) { Text("All") }
+        TextButton(onClick = { vm.selectAll(visible.filter { !it.isActive }.map { it.id }) }) { Text(Strings.get(R.string.main_screen_all)) }
         if (uris.isNotEmpty()) {
             IconButton(onClick = {
                 runCatching { ctx.startActivity(Sharing.chooser(uris.map(Uri::parse), null)) }
-            }) { Icon(Icons.Default.Share, contentDescription = "Share") }
+            }) { Icon(Icons.Default.Share, contentDescription = Strings.get(R.string.group_ui_share)) }
         }
         IconButton(onClick = { askDelete = true }, enabled = chosen.isNotEmpty()) {
-            Icon(Icons.Default.Delete, contentDescription = "Remove")
+            Icon(Icons.Default.Delete, contentDescription = Strings.get(R.string.settings_screen_remove))
         }
-        TextButton(onClick = vm::clearSelection) { Text("Cancel") }
+        TextButton(onClick = vm::clearSelection) { Text(Strings.get(R.string.settings_screen_cancel)) }
     }
 }
 
@@ -449,7 +451,7 @@ private fun ClipCard(vm: MainViewModel, link: String) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Copied link", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(Strings.get(R.string.main_screen_copied_link), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             Text(
                 // Sin la parte tras "?": puede llevar claves personales.
                 UrlUtils.shorten(link.substringBefore('?').substringBefore('#')),
@@ -460,12 +462,12 @@ private fun ClipCard(vm: MainViewModel, link: String) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (vm.canQuickDownload(link)) {
-                    Button(onClick = vm::clipDownload) { Text("Download") }
-                    OutlinedButton(onClick = vm::clipOptions) { Text("Options") }
+                    Button(onClick = vm::clipDownload) { Text(Strings.get(R.string.settings_screen_download)) }
+                    OutlinedButton(onClick = vm::clipOptions) { Text(Strings.get(R.string.main_screen_options)) }
                 } else {
-                    Button(onClick = vm::clipOptions) { Text("Options") }
+                    Button(onClick = vm::clipOptions) { Text(Strings.get(R.string.main_screen_options)) }
                 }
-                TextButton(onClick = vm::dismissClip) { Text("Ignore") }
+                TextButton(onClick = vm::dismissClip) { Text(Strings.get(R.string.main_screen_ignore)) }
             }
         }
     }
@@ -476,10 +478,10 @@ private fun DuplicateDialog(vm: MainViewModel) {
     val p = vm.duplicatePrompt ?: return
     AlertDialog(
         onDismissRequest = vm::dismissDuplicate,
-        title = { Text("Already downloaded") },
-        text = { Text(if (p.active) "This link is already downloading." else "Download it again?") },
-        confirmButton = { TextButton(onClick = vm::confirmDuplicate) { Text("Download") } },
-        dismissButton = { TextButton(onClick = vm::dismissDuplicate) { Text("Cancel") } },
+        title = { Text(Strings.get(R.string.main_screen_already_downloaded)) },
+        text = { Text(if (p.active) Strings.get(R.string.main_screen_this_link_is_already_downloading) else Strings.get(R.string.main_screen_download_it_again)) },
+        confirmButton = { TextButton(onClick = vm::confirmDuplicate) { Text(Strings.get(R.string.settings_screen_download)) } },
+        dismissButton = { TextButton(onClick = vm::dismissDuplicate) { Text(Strings.get(R.string.settings_screen_cancel)) } },
     )
 }
 
@@ -489,13 +491,13 @@ private fun AppUpdateDialog(vm: MainViewModel, release: AppUpdater.Release) {
     val ctx = LocalContext.current
     AlertDialog(
         onDismissRequest = { if (!vm.appUpdateBusy) vm.dismissAppUpdate() },
-        title = { Text("New version available") },
+        title = { Text(Strings.get(R.string.main_screen_new_version_available)) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text("Version ${release.version}", style = MaterialTheme.typography.titleSmall)
+                Text(Strings.get(R.string.main_screen_version, release.version), style = MaterialTheme.typography.titleSmall)
                 if (release.notes.isNotBlank()) {
                     Text(release.notes.take(600), style = MaterialTheme.typography.bodyMedium)
                 }
@@ -504,16 +506,16 @@ private fun AppUpdateDialog(vm: MainViewModel, release: AppUpdater.Release) {
                         progress = { vm.appUpdateProgress / 100f },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text("Downloading… ${vm.appUpdateProgress}%", style = MaterialTheme.typography.bodySmall)
+                    Text(Strings.get(R.string.main_screen_downloading, vm.appUpdateProgress), style = MaterialTheme.typography.bodySmall)
                 }
                 vm.appUpdateMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
-            TextButton(onClick = vm::installAppUpdate, enabled = !vm.appUpdateBusy) { Text("Update") }
+            TextButton(onClick = vm::installAppUpdate, enabled = !vm.appUpdateBusy) { Text(Strings.get(R.string.main_screen_update)) }
         },
         dismissButton = {
-            TextButton(onClick = vm::dismissAppUpdate, enabled = !vm.appUpdateBusy) { Text("Later") }
+            TextButton(onClick = vm::dismissAppUpdate, enabled = !vm.appUpdateBusy) { Text(Strings.get(R.string.main_screen_later)) }
         },
     )
 }
@@ -524,18 +526,18 @@ private fun LoginPromptDialog(vm: MainViewModel, prompt: LoginPrompt) {
     val ctx = LocalContext.current
     AlertDialog(
         onDismissRequest = vm::dismissLoginPrompt,
-        title = { Text("Sign-in required") },
+        title = { Text(Strings.get(R.string.main_screen_sign_in_required)) },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    "To download this video, ${prompt.host} requires signing in. QuietDLP doesn't store your " +
-                        "password, only the session, and you can sign out any time in Settings › Sessions.",
+                    Strings.get(R.string.main_screen_to_download_this_video_requires, prompt.host) +
+                        Strings.get(R.string.main_screen_password_only_the_session_and),
                 )
                 Text(
-                    "If the site offers to save your login, choose “Not now”.",
+                    Strings.get(R.string.main_screen_if_the_site_offers_to),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -547,10 +549,10 @@ private fun LoginPromptDialog(vm: MainViewModel, prompt: LoginPrompt) {
                     Intent(ctx, LoginActivity::class.java)
                         .putExtra(LoginActivity.EXTRA_HOST, prompt.host),
                 )
-            }) { Text("Continue") }
+            }) { Text(Strings.get(R.string.main_screen_continue)) }
         },
         dismissButton = {
-            TextButton(onClick = vm::dismissLoginPrompt) { Text("Not now") }
+            TextButton(onClick = vm::dismissLoginPrompt) { Text(Strings.get(R.string.group_ui_not_now)) }
         },
     )
 }
@@ -560,15 +562,15 @@ private fun LoginPromptDialog(vm: MainViewModel, prompt: LoginPrompt) {
 private fun UpdateNoticeDialog(vm: MainViewModel) {
     AlertDialog(
         onDismissRequest = { vm.dismissUpdateNotice(disable = false) },
-        title = { Text("Automatic updates are on") },
+        title = { Text(Strings.get(R.string.main_screen_automatic_updates_are_on)) },
         text = {
-            Text("QuietDLP updates yt-dlp by itself, at most once a day. You can turn this off in Settings.")
+            Text(Strings.get(R.string.main_screen_quietdlp_updates_yt_dlp_by))
         },
         confirmButton = {
-            TextButton(onClick = { vm.dismissUpdateNotice(disable = false) }) { Text("Got it") }
+            TextButton(onClick = { vm.dismissUpdateNotice(disable = false) }) { Text(Strings.get(R.string.main_screen_got_it)) }
         },
         dismissButton = {
-            TextButton(onClick = { vm.dismissUpdateNotice(disable = true) }) { Text("Turn off") }
+            TextButton(onClick = { vm.dismissUpdateNotice(disable = true) }) { Text(Strings.get(R.string.main_screen_turn_off)) }
         },
     )
 }
@@ -577,13 +579,13 @@ private fun UpdateNoticeDialog(vm: MainViewModel) {
 private fun EngineBanner(vm: MainViewModel) {
     when {
         vm.engineError != null -> Text(
-            "Couldn't start: ${vm.engineError}",
+            Strings.get(R.string.main_screen_couldn_t_start, vm.engineError),
             color = MaterialTheme.colorScheme.error,
         )
         !vm.engineReady -> Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
             Text(
-                "  Getting ready…",
+                Strings.get(R.string.main_screen_getting_ready),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -600,16 +602,16 @@ private fun UrlCard(vm: MainViewModel) {
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Save a video, song or photos", style = MaterialTheme.typography.titleMedium)
+            Text(Strings.get(R.string.settings_screen_save_a_video_song_or), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = vm.url,
                 onValueChange = { vm.url = it },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Paste a link") },
+                placeholder = { Text(Strings.get(R.string.main_screen_paste_a_link)) },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium,
                 trailingIcon = {
-                    TextButton(onClick = { clipboard.getText()?.text?.let { vm.url = it } }) { Text("Paste") }
+                    TextButton(onClick = { clipboard.getText()?.text?.let { vm.url = it } }) { Text(Strings.get(R.string.main_screen_paste)) }
                 },
             )
             Button(
@@ -621,7 +623,7 @@ private fun UrlCard(vm: MainViewModel) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                     Text("  Analyzing…")
                 } else {
-                    Text("Analyze")
+                    Text(Strings.get(R.string.main_screen_analyze))
                 }
             }
         }
@@ -631,14 +633,14 @@ private fun UrlCard(vm: MainViewModel) {
 /** Qué significa cada calidad del modo simple, en una línea. */
 private fun levelHint(kind: Kind, level: QualityLevel): String = when (kind) {
     Kind.AUDIO -> when (level) {
-        QualityLevel.HIGH -> "M4A, the best quality."
-        QualityLevel.MEDIUM -> "MP3 192k."
-        QualityLevel.LOW -> "MP3 128k, the smallest."
+        QualityLevel.HIGH -> Strings.get(R.string.main_screen_m4a_the_best_quality)
+        QualityLevel.MEDIUM -> Strings.get(R.string.main_screen_mp3_192k)
+        QualityLevel.LOW -> Strings.get(R.string.main_screen_mp3_128k_the_smallest)
     }
     else -> when (level) {
-        QualityLevel.HIGH -> "The best quality the site offers."
+        QualityLevel.HIGH -> Strings.get(R.string.main_screen_the_best_quality_the_site)
         QualityLevel.MEDIUM -> "720p."
-        QualityLevel.LOW -> "480p, the smallest."
+        QualityLevel.LOW -> Strings.get(R.string.main_screen_480p_the_smallest)
     }
 }
 
@@ -646,17 +648,17 @@ private fun levelHint(kind: Kind, level: QualityLevel): String = when (kind) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AudioFormatPicker(vm: MainViewModel) {
-    Text("Format", style = MaterialTheme.typography.labelLarge)
+    Text(Strings.get(R.string.main_screen_format), style = MaterialTheme.typography.labelLarge)
     AudioOptions.byTier().forEach { (tier, options) ->
-        Text(tier.label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(Strings.tr(tier.label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             options.forEach { o ->
-                QuietChip(vm.audioFormat == o.format && vm.audioBitrate == o.bitrate, { vm.chooseAudio(o) }, o.label)
+                QuietChip(vm.audioFormat == o.format && vm.audioBitrate == o.bitrate, { vm.chooseAudio(o) }, Strings.tr(o.label))
             }
         }
     }
     Text(
-        AudioOptions.find(vm.audioFormat, vm.audioBitrate).hint,
+        Strings.tr(AudioOptions.find(vm.audioFormat, vm.audioBitrate).hint),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -698,17 +700,17 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                 if (info.profile != null) {
                     ProfileSection(vm, info.profile)
                 } else if (info.photoCount > 0) {
-                    StatusPill("Photos", Tone.ACTIVE)
+                    StatusPill(Strings.get(R.string.main_screen_photos), Tone.ACTIVE)
                 } else {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QuietChip(vm.kind == Kind.VIDEO, { vm.chooseKind(Kind.VIDEO) }, "Video", enabled = info.heights.isNotEmpty())
-                        QuietChip(vm.kind == Kind.AUDIO, { vm.chooseKind(Kind.AUDIO) }, "Audio")
+                        QuietChip(vm.kind == Kind.VIDEO, { vm.chooseKind(Kind.VIDEO) }, Strings.get(R.string.settings_screen_video), enabled = info.heights.isNotEmpty())
+                        QuietChip(vm.kind == Kind.AUDIO, { vm.chooseKind(Kind.AUDIO) }, Strings.get(R.string.group_ui_audio))
                     }
                     if (!vm.advanced) {
                         // Modo simple: vídeo o audio y una calidad (alta, media o baja). El detalle está en el modo avanzado.
-                        Text("Quality", style = MaterialTheme.typography.labelLarge)
+                        Text(Strings.get(R.string.main_screen_quality), style = MaterialTheme.typography.labelLarge)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            QualityLevel.entries.forEach { QuietChip(vm.level == it, { vm.chooseLevel(it) }, it.label) }
+                            QualityLevel.entries.forEach { QuietChip(vm.level == it, { vm.chooseLevel(it) }, Strings.tr(it.label)) }
                         }
                         Text(
                             levelHint(vm.kind, vm.level),
@@ -716,9 +718,9 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     } else if (vm.kind == Kind.VIDEO) {
-                        Text("Quality", style = MaterialTheme.typography.labelLarge)
+                        Text(Strings.get(R.string.main_screen_quality), style = MaterialTheme.typography.labelLarge)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            QuietChip(vm.height == 0, { vm.height = 0 }, "Best")
+                            QuietChip(vm.height == 0, { vm.height = 0 }, Strings.get(R.string.main_screen_best))
                             info.heights.forEach { h ->
                                 QuietChip(vm.height == h, { vm.height = h }, resolutionName(h))
                             }
@@ -737,7 +739,7 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                     if (vm.canChapters(info)) ChaptersSection(vm)
                     if (vm.advanced && vm.trimOn && (SponsorChoice.supports(info.url) || info.chapterCount > 0)) {
                         Text(
-                            "SponsorBlock and chapters aren't available when trimming.",
+                            Strings.get(R.string.main_screen_sponsorblock_and_chapters_aren_t),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -745,7 +747,7 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                 }
 
                 Button(onClick = vm::download, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-                    Text(if (info.playlistCount > 0 && vm.kind != Kind.PHOTO) "Download ${info.playlistCount} videos" else "Download")
+                    Text(if (info.playlistCount > 0 && vm.kind != Kind.PHOTO) Strings.get(R.string.main_screen_download_videos, info.playlistCount) else Strings.get(R.string.settings_screen_download))
                 }
                 if (info.photoCount == 0 && info.profile == null) {
                     val ctx = LocalContext.current
@@ -754,11 +756,11 @@ private fun InfoCard(vm: MainViewModel, info: MediaInfo) {
                         TextButton(
                             onClick = {
                                 vm.rememberForSite(info)?.let {
-                                    Toast.makeText(ctx, "Saved for $it", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(ctx, Strings.get(R.string.main_screen_saved_for, it), Toast.LENGTH_SHORT).show()
                                 }
                             },
                             modifier = Modifier.align(Alignment.CenterHorizontally),
-                        ) { Text("Always use this for $host") }
+                        ) { Text(Strings.get(R.string.main_screen_always_use_this_for, host)) }
                     }
                 }
             }
@@ -776,15 +778,15 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
     if (askDelete) {
         AlertDialog(
             onDismissRequest = { askDelete = false },
-            title = { Text("Remove from history") },
+            title = { Text(Strings.get(R.string.main_screen_remove_from_history)) },
             text = { Text(item.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
             confirmButton = {
-                TextButton(onClick = { askDelete = false; vm.delete(item, deleteFiles = false) }) { Text("List only") }
+                TextButton(onClick = { askDelete = false; vm.delete(item, deleteFiles = false) }) { Text(Strings.get(R.string.group_ui_list_only)) }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { askDelete = false }) { Text("Cancel") }
-                    TextButton(onClick = { askDelete = false; vm.delete(item, deleteFiles = true) }) { Text("Delete file too") }
+                    TextButton(onClick = { askDelete = false }) { Text(Strings.get(R.string.settings_screen_cancel)) }
+                    TextButton(onClick = { askDelete = false; vm.delete(item, deleteFiles = true) }) { Text(Strings.get(R.string.main_screen_delete_file_too)) }
                 }
             },
         )
@@ -827,18 +829,18 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                     Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatusPill(statusLabel(item), statusTone(item))
-                        if (item.fresh) StatusPill("New", Tone.NEW)
+                        if (item.fresh) StatusPill(Strings.get(R.string.group_ui_new), Tone.NEW)
                         Text(
-                            item.quality.label(),
+                            Strings.tr(item.quality.label()),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                         )
                     }
                     if (item.state == State.FAILED && !item.message.isNullOrBlank()) {
-                        Text(item.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text(Errors.localize(item.message), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     } else if (item.state == State.DONE && !item.message.isNullOrBlank()) {
-                        Text(item.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(Errors.localize(item.message), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
 
                     when (item.state) {
@@ -860,28 +862,28 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
                     ) {
                         when {
-                            item.isActive -> TextButton(onClick = { vm.cancel(item.id) }) { Text("Cancel") }
+                            item.isActive -> TextButton(onClick = { vm.cancel(item.id) }) { Text(Strings.get(R.string.settings_screen_cancel)) }
                             item.state == State.DONE -> {
                                 if (!item.isConversion) LinkMenu(item.url) { vm.downloadAgain(item) }
                                 if (item.savedUris.isNotEmpty()) {
                                     IconButton(onClick = {
                                         runCatching { ctx.startActivity(Sharing.chooser(item.savedUris.map(Uri::parse), item.mime)) }
-                                    }) { Icon(Icons.Default.Share, contentDescription = "Share") }
+                                    }) { Icon(Icons.Default.Share, contentDescription = Strings.get(R.string.group_ui_share)) }
                                     IconButton(onClick = { openFile(ctx, item) }) {
-                                        Icon(Icons.Default.PlayArrow, contentDescription = "Open")
+                                        Icon(Icons.Default.PlayArrow, contentDescription = Strings.get(R.string.group_ui_open))
                                     }
                                     if (item.savedUris.size > 1) {
                                         TextButton(onClick = { showFiles = true }) { Text("${item.savedUris.size} files") }
                                     } else if (ConvertTargets.canConvert(item.mime)) {
-                                        TextButton(onClick = { askConvert = true }) { Text("Convert") }
+                                        TextButton(onClick = { askConvert = true }) { Text(Strings.get(R.string.group_ui_convert)) }
                                     }
                                     if (item.photoVideo) {
-                                        TextButton(onClick = { askVideo = true }) { Text("Make video") }
+                                        TextButton(onClick = { askVideo = true }) { Text(Strings.get(R.string.main_screen_make_video)) }
                                     }
                                 }
                                 IconButton(onClick = {
                                     if (item.savedUris.isNotEmpty()) askDelete = true else vm.remove(item.id)
-                                }) { Icon(Icons.Default.Delete, contentDescription = "Remove from list") }
+                                }) { Icon(Icons.Default.Delete, contentDescription = Strings.get(R.string.main_screen_remove_from_list)) }
                             }
                             else -> {
                                 if (!item.isConversion) LinkMenu(item.url) { vm.downloadAgain(item) }
@@ -893,17 +895,17 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                                                 title = item.title, thumbnail = item.thumbnail, oldItemId = item.id,
                                             ),
                                         )
-                                    }) { Text("Sign in") }
+                                    }) { Text(Strings.get(R.string.settings_screen_sign_in)) }
                                 }
                                 if (item.state == State.FAILED && Errors.needsEngineUpdate(item.message)) {
                                     // Lo más probable es un yt-dlp viejo: se actualiza y se reintenta de una vez.
                                     Button(onClick = { vm.updateEngine { vm.retry(item) } }, enabled = !vm.updating) {
-                                        Text(if (vm.updating) "Updating…" else "Update engine")
+                                        Text(if (vm.updating) Strings.get(R.string.settings_screen_updating) else Strings.get(R.string.main_screen_update_engine))
                                     }
                                 }
-                                if (!item.isConversion) OutlinedButton(onClick = { vm.retry(item) }) { Text("Retry") }
+                                if (!item.isConversion) OutlinedButton(onClick = { vm.retry(item) }) { Text(Strings.get(R.string.main_screen_retry)) }
                                 IconButton(onClick = { vm.remove(item.id) }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Remove from list")
+                                    Icon(Icons.Default.Delete, contentDescription = Strings.get(R.string.main_screen_remove_from_list))
                                 }
                             }
                         }
@@ -923,33 +925,33 @@ private fun LinkMenu(link: String, onDownloadAgain: () -> Unit) {
     val ctx = LocalContext.current
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = "More") }
+        IconButton(onClick = { open = true }) { Icon(Icons.Default.MoreVert, contentDescription = Strings.get(R.string.main_screen_more)) }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text("Download again") },
+                text = { Text(Strings.get(R.string.main_screen_download_again)) },
                 onClick = {
                     open = false
                     onDownloadAgain()
                 },
             )
             DropdownMenuItem(
-                text = { Text("Open original link") },
+                text = { Text(Strings.get(R.string.main_screen_open_original_link)) },
                 onClick = {
                     open = false
                     try {
                         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     } catch (_: ActivityNotFoundException) {
-                        Toast.makeText(ctx, "No app can open this link", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(ctx, Strings.get(R.string.main_screen_no_app_can_open_this), Toast.LENGTH_SHORT).show()
                     }
                 },
             )
             DropdownMenuItem(
-                text = { Text("Copy link") },
+                text = { Text(Strings.get(R.string.settings_screen_copy_link)) },
                 onClick = {
                     open = false
                     val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                     cm.setPrimaryClip(ClipData.newPlainText("link", link))
-                    Toast.makeText(ctx, "Link copied", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(ctx, Strings.get(R.string.main_screen_link_copied), Toast.LENGTH_SHORT).show()
                 },
             )
         }
@@ -965,17 +967,17 @@ private fun MakeVideoDialog(current: Int, rememberChoice: Boolean, onDismiss: ()
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Make video") },
+        title = { Text(Strings.get(R.string.main_screen_make_video)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("How long should the song play?", style = MaterialTheme.typography.labelMedium, color = muted)
+                Text(Strings.get(R.string.main_screen_how_long_should_the_song), style = MaterialTheme.typography.labelMedium, color = muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Slideshow.SONG_LENGTHS.forEach { (seconds, label) ->
                         QuietChip(picked == seconds, { picked = seconds }, label)
                     }
                 }
                 Text(
-                    "Each photo shows for at least 3 seconds. A cut song fades out.",
+                    Strings.get(R.string.main_screen_each_photo_shows_for_at),
                     style = MaterialTheme.typography.bodySmall, color = muted,
                 )
                 Row(
@@ -983,12 +985,12 @@ private fun MakeVideoDialog(current: Int, rememberChoice: Boolean, onDismiss: ()
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked = remembered, onCheckedChange = { remembered = it })
-                    Text("Remember my choice", style = MaterialTheme.typography.bodyMedium)
+                    Text(Strings.get(R.string.settings_screen_remember_my_choice), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onMake(picked, remembered) }) { Text("Make video") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onMake(picked, remembered) }) { Text(Strings.get(R.string.main_screen_make_video)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.get(R.string.settings_screen_cancel)) } },
     )
 }
 
@@ -1000,42 +1002,42 @@ internal fun ConvertDialog(item: DownloadItem, onDismiss: () -> Unit, onConvert:
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Convert to") },
+        title = { Text(Strings.get(R.string.main_screen_convert_to)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(item.title, style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 ConvertTargets.sectionsFor(item.mime).forEach { section ->
-                    Text(section.title, style = MaterialTheme.typography.labelMedium, color = muted)
+                    Text(Strings.tr(section.title), style = MaterialTheme.typography.labelMedium, color = muted)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        section.targets.forEach { t -> QuietChip(picked == t, { picked = t }, t.label) }
+                        section.targets.forEach { t -> QuietChip(picked == t, { picked = t }, Strings.tr(t.label)) }
                     }
                 }
                 picked?.let { t ->
-                    Text(t.hint, style = MaterialTheme.typography.bodySmall, color = muted)
-                    ConvertTargets.warning(t, item.mime)?.let {
+                    Text(Strings.tr(t.hint), style = MaterialTheme.typography.bodySmall, color = muted)
+                    ConvertTargets.warning(t, item.mime)?.let { Strings.tr(it) }?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { picked?.let(onConvert) }, enabled = picked != null) { Text("Convert") }
+            TextButton(onClick = { picked?.let(onConvert) }, enabled = picked != null) { Text(Strings.get(R.string.group_ui_convert)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(Strings.get(R.string.settings_screen_cancel)) } },
     )
 }
 
 private fun statusLabel(item: DownloadItem): String = when (item.state) {
-    State.QUEUED -> item.message ?: "Queued"
-    State.PREPARING -> "Getting ready"
+    State.QUEUED -> item.message?.let(Errors::localize) ?: Strings.get(R.string.main_screen_queued)
+    State.PREPARING -> Strings.get(R.string.main_screen_getting_ready_2)
     State.DOWNLOADING -> buildString {
         append("${item.progress.toInt()}%")
-        if (item.etaSeconds > 0) append(" · ${formatDuration(item.etaSeconds.toInt())} left")
+        if (item.etaSeconds > 0) append(" · " + Strings.get(R.string.time_left, formatDuration(item.etaSeconds.toInt())))
     }
-    State.PROCESSING -> (item.message ?: "Processing").removeSuffix("…")
-    State.DONE -> "Done"
-    State.FAILED -> "Failed"
-    State.CANCELED -> "Canceled"
+    State.PROCESSING -> (item.message?.let(Errors::localize) ?: Strings.get(R.string.main_screen_processing)).removeSuffix("…")
+    State.DONE -> Strings.get(R.string.settings_screen_done)
+    State.FAILED -> Strings.get(R.string.main_screen_failed)
+    State.CANCELED -> Strings.get(R.string.main_screen_canceled)
 }
 
 private fun formatDuration(totalSeconds: Int): String? {
@@ -1054,9 +1056,9 @@ internal fun openFile(ctx: Context, item: DownloadItem) {
     try {
         ctx.startActivity(intent)
     } catch (_: ActivityNotFoundException) {
-        Toast.makeText(ctx, "No app can open this file", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, Strings.get(R.string.main_screen_no_app_can_open_this_2), Toast.LENGTH_SHORT).show()
     } catch (_: SecurityException) {
-        Toast.makeText(ctx, "Couldn't open the file", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, Strings.get(R.string.main_screen_couldn_t_open_the_file), Toast.LENGTH_SHORT).show()
     }
 }
 

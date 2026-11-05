@@ -31,7 +31,7 @@ class ShareReceiverActivity : Activity() {
 
         when {
             url == null -> {
-                toast("No link found in what you shared")
+                toast(Strings.get(R.string.share_receiver_activity_no_link_found_in_what))
                 close()
             }
 
@@ -55,16 +55,16 @@ class ShareReceiverActivity : Activity() {
 
     private fun start(url: String, quality: Quality) {
         DownloadService.enqueue(this, url, quality)
-        toast("QuietDLP: downloading in the background…")
+        toast(Strings.get(R.string.share_receiver_activity_quietdlp_downloading_in_the_background))
         close()
     }
 
     private fun askAgain(url: String, quality: Quality) {
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Already downloaded")
-            .setMessage("Download it again?")
-            .setPositiveButton("Download") { _, _ -> start(url, quality) }
-            .setNegativeButton("Cancel") { _, _ -> close() }
+            .setTitle(Strings.get(R.string.main_screen_already_downloaded))
+            .setMessage(Strings.get(R.string.main_screen_download_it_again))
+            .setPositiveButton(Strings.get(R.string.settings_screen_download)) { _, _ -> start(url, quality) }
+            .setNegativeButton(Strings.get(R.string.settings_screen_cancel)) { _, _ -> close() }
             .setOnCancelListener { close() }
             .show()
     }

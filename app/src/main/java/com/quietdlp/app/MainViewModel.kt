@@ -404,7 +404,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         val ok = runCatching { app.contentResolver.takePersistableUriPermission(uri, flags) }.isSuccess
         if (!ok) {
-            Toast.makeText(app, "Couldn't use that folder", Toast.LENGTH_SHORT).show()
+            Toast.makeText(app, Strings.get(R.string.main_view_model_couldn_t_use_that_folder), Toast.LENGTH_SHORT).show()
             return
         }
         releaseFolder()
@@ -522,9 +522,9 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
 
     fun importCookies(uri: Uri) {
         accountMessage = if (CookieStore.importFile(app, uri)) {
-            "Cookies imported."
+            Strings.get(R.string.main_view_model_cookies_imported)
         } else {
-            "Invalid cookies.txt."
+            Strings.get(R.string.main_view_model_invalid_cookies_txt)
         }
         refreshAccounts()
     }
@@ -559,7 +559,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun checkAppUpdate(manual: Boolean) {
         if (appUpdateBusy) return
         if (!AppUpdater.isConfigured(app)) {
-            if (manual) appUpdateMessage = "No downloads page yet."
+            if (manual) appUpdateMessage = Strings.get(R.string.main_view_model_no_downloads_page_yet)
             return
         }
         appUpdateBusy = true
@@ -570,16 +570,16 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                 prefs.lastAppCheckMs = System.currentTimeMillis()
                 val current = AppUpdater.currentVersion(app)
                 when {
-                    r == null -> if (manual) appUpdateMessage = "No releases published yet."
+                    r == null -> if (manual) appUpdateMessage = Strings.get(R.string.main_view_model_no_releases_published_yet)
                     !AppUpdater.isNewer(r.version, current) ->
-                        if (manual) appUpdateMessage = "You're up to date ($current)."
+                        if (manual) appUpdateMessage = Strings.get(R.string.main_view_model_you_re_up_to_date, current)
                     else -> {
                         appUpdate = r
                         if (manual || prefs.dismissedAppVersion != r.version) showAppUpdate = true
                     }
                 }
             } catch (t: Throwable) {
-                if (manual) appUpdateMessage = "Couldn't check: " + Errors.friendly(t)
+                if (manual) appUpdateMessage = Strings.get(R.string.update_check_failed) + " " + Errors.friendlyText(t)
             } finally {
                 appUpdateBusy = false
             }
@@ -591,7 +591,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         val r = appUpdate ?: return
         if (appUpdateBusy) return
         if (!AppUpdater.canInstall(app)) {
-            appUpdateMessage = "Turn on “Allow from this source” for QuietDLP, then tap Update again."
+            appUpdateMessage = Strings.get(R.string.main_view_model_turn_on_allow_from_this)
             app.startActivity(AppUpdater.permissionIntent(app))
             return
         }
@@ -610,7 +610,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     app.startActivity(AppUpdater.installIntent(app, file))
                 }
             } catch (t: Throwable) {
-                appUpdateMessage = "Download failed: " + (t.message ?: t.toString()).take(160)
+                appUpdateMessage = Strings.get(R.string.download_failed) + " " + Errors.localize((t.message ?: t.toString()).take(160))
             } finally {
                 appUpdateBusy = false
                 appUpdateProgress = -1
@@ -724,11 +724,11 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun startFollow() {
         val u = UrlUtils.extract(followUrl)?.let(FollowUrl::normalize)
         if (u == null) {
-            followError = "That's not a link."
+            followError = Strings.get(R.string.main_view_model_that_s_not_a_link)
             return
         }
         if (FollowStore.pages.value.any { it.url == u }) {
-            followError = "You already follow this page."
+            followError = Strings.get(R.string.main_view_model_you_already_follow_this_page)
             return
         }
         followError = null
@@ -739,7 +739,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                 followSetupUrl = u
                 followSetup = probe
             } catch (t: Throwable) {
-                followError = Errors.friendly(t)
+                followError = Errors.friendlyText(t)
             } finally {
                 followProbing = false
             }
@@ -900,7 +900,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         }
         val u = UrlUtils.extract(raw)
         if (u == null) {
-            error = "That's not a link."
+            error = Strings.get(R.string.main_view_model_that_s_not_a_link)
             return
         }
         url = u
@@ -993,7 +993,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     if (n > 0) {
                         info = MediaInfo(
                             url = u,
-                            title = if (n == 1) "1 photo" else "$n photos",
+                            title = if (n == 1) Strings.get(R.string.main_view_model_1_photo) else "$n photos",
                             thumbnail = null,
                             uploader = null,
                             durationSec = 0,
@@ -1005,7 +1005,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                         return@launch
                     }
                 }
-                error = Errors.friendly(t)
+                error = Errors.friendlyText(t)
                 // Falta iniciar sesión: explicar y ofrecer abrir la página de login.
                 if (Errors.isLoginRequired(t)) {
                     UrlUtils.hostOf(u)?.let(UrlUtils::registrableDomain)?.let { host ->
@@ -1155,7 +1155,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     title = e.title,
                     thumbnail = e.thumbnail,
                     quality = quality,
-                    message = if (waiting) "Waiting for Wi-Fi…" else null,
+                    message = if (waiting) Strings.get(R.string.main_view_model_waiting_for_wi_fi) else null,
                     groupId = gid,
                     groupIndex = i,
                     groupTitle = title,
@@ -1348,7 +1348,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             if (allGone) {
                 DownloadRepository.remove(item.id)
             } else {
-                Toast.makeText(app, "Couldn't delete the file", Toast.LENGTH_SHORT).show()
+                Toast.makeText(app, Strings.get(R.string.main_view_model_couldn_t_delete_the_file), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1416,7 +1416,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                 if (allGone) DownloadRepository.remove(item.id) else failed++
             }
             if (failed > 0) {
-                Toast.makeText(app, "Couldn't delete $failed ${if (failed == 1) "file" else "files"}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(app, if (failed == 1) Strings.get(R.string.delete_failed_one) else Strings.get(R.string.delete_failed_many, failed), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -1451,7 +1451,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             updateMessage = try {
                 Engine.update(app, prefs)
             } catch (t: Throwable) {
-                "Couldn't update: " + Errors.friendly(t)
+                Strings.get(R.string.update_failed) + " " + Errors.friendlyText(t)
             }
             ytdlpVersion = Engine.version(app)
             updating = false
@@ -1468,9 +1468,9 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             backupMessage = withContext(Dispatchers.IO) {
                 runCatching {
                     app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(prefs.exportSettings(DownloadRepository.items.value, FollowStore.pages.value).toByteArray()) }
-                        ?: error("Couldn't write the file")
-                    "Backup saved."
-                }.getOrElse { "Couldn't save: ${it.message}" }
+                        ?: error(Strings.get(R.string.main_view_model_couldn_t_write_the_file))
+                    Strings.get(R.string.main_view_model_backup_saved)
+                }.getOrElse { Strings.get(R.string.main_view_model_couldn_t_save, it.message) }
             }
         }
     }
@@ -1507,20 +1507,20 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
             backupMessage = withContext(Dispatchers.IO) {
                 runCatching {
                     val bytes = app.contentResolver.openInputStream(uri)?.use { readAtMost(it, SettingsBackup.MAX_BYTES) }
-                        ?: error("Couldn't read the file")
-                    if (bytes == null) return@runCatching "That file is too big to be a QuietDLP backup."
+                        ?: error(Strings.get(R.string.main_view_model_couldn_t_read_the_file))
+                    if (bytes == null) return@runCatching Strings.get(R.string.main_view_model_that_file_is_too_big)
                     val text = String(bytes)
                     val n = prefs.importSettings(text)
-                    if (n < 0) return@runCatching "That isn't a QuietDLP backup."
+                    if (n < 0) return@runCatching Strings.get(R.string.main_view_model_that_isn_t_a_quietdlp)
                     val rows = DownloadRepository.mergeHistory(app, SettingsBackup.decodeHistory(text))
                     val pages = restoreFollows(SettingsBackup.decodeFollows(text))
                     buildString {
-                        append("Restored $n settings")
-                        if (rows > 0) append(" and $rows history ${if (rows == 1) "item" else "items"}")
-                        if (pages > 0) append(" and $pages followed ${if (pages == 1) "page" else "pages"}")
-                        append(". Close the app and open it again to apply the settings.")
+                        append(Strings.get(R.string.main_view_model_restored_settings, n))
+                        if (rows > 0) append(" " + if (rows == 1) Strings.get(R.string.restore_history_one) else Strings.get(R.string.restore_history_many, rows))
+                        if (pages > 0) append(" " + if (pages == 1) Strings.get(R.string.restore_pages_one) else Strings.get(R.string.restore_pages_many, pages))
+                        append(Strings.get(R.string.main_view_model_close_the_app_and_open))
                     }
-                }.getOrElse { "Couldn't restore: ${it.message}" }
+                }.getOrElse { Strings.get(R.string.main_view_model_couldn_t_restore, it.message) }
             }
         }
     }

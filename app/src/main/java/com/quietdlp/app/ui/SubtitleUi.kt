@@ -29,12 +29,14 @@ import androidx.compose.ui.unit.dp
 import com.quietdlp.app.MainViewModel
 import com.quietdlp.app.MediaInfo
 import com.quietdlp.app.data.SubtitleMode
+import com.quietdlp.app.R
+import com.quietdlp.app.Strings
 
 /** Qué significa cada lugar donde pueden ir los subtítulos, en una línea. */
 private fun modeHint(mode: SubtitleMode): String = when (mode) {
-    SubtitleMode.INSIDE -> "A track inside the MP4. Turn it on in your player."
-    SubtitleMode.MKV -> "VLC turns it on by itself. WhatsApp can't play MKV."
-    SubtitleMode.SEPARATE -> "A .srt file next to the video. Without a chosen folder, both go to Downloads."
+    SubtitleMode.INSIDE -> Strings.get(R.string.subtitle_ui_a_track_inside_the_mp4)
+    SubtitleMode.MKV -> Strings.get(R.string.subtitle_ui_vlc_turns_it_on_by)
+    SubtitleMode.SEPARATE -> Strings.get(R.string.subtitle_ui_a_srt_file_next_to)
 }
 
 /** Subtítulos en la tarjeta del enlace: un interruptor y, al encenderlo, el idioma. Solo para un vídeo. */
@@ -46,27 +48,27 @@ internal fun SubtitlesSection(vm: MainViewModel, info: MediaInfo) {
     // Los subtítulos no se recortan con el vídeo (saldrían desfasados): con un trozo no se ofrecen.
     if (info.subtitles.isNotEmpty() && (vm.trimOn || vm.removingParts(info))) {
         Text(
-            if (vm.trimOn) "Subtitles aren't available when trimming." else "Subtitles aren't available when removing sponsor parts.",
+            if (vm.trimOn) Strings.get(R.string.subtitle_ui_subtitles_aren_t_available_when) else Strings.get(R.string.subtitle_ui_subtitles_aren_t_available_when_2),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         return
     }
     if (info.subtitles.isEmpty()) {
-        Text("No subtitles for this video", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(Strings.get(R.string.subtitle_ui_no_subtitles_for_this_video), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Subtitles", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        Text(Strings.get(R.string.subtitle_ui_subtitles), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
         Switch(checked = vm.subsOn, onCheckedChange = vm::changeSubsOn)
     }
     if (!vm.subsOn) return
     val chosen = vm.subCodes.mapNotNull { c -> info.subtitles.firstOrNull { it.code == c }?.label }
     TextButton(onClick = { picking = true }) {
-        Text(if (chosen.isEmpty()) "Choose a language" else chosen.joinToString(", "))
+        Text(if (chosen.isEmpty()) Strings.get(R.string.subtitle_ui_choose_a_language) else chosen.joinToString(", "))
     }
     val hint = when {
-        info.subtitles.all { it.auto } -> "Automatic captions only."
+        info.subtitles.all { it.auto } -> Strings.get(R.string.subtitle_ui_automatic_captions_only)
         else -> modeHint(vm.effectiveSubMode)
     }
     Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -78,7 +80,7 @@ internal fun SubtitlesSection(vm: MainViewModel, info: MediaInfo) {
 private fun SubtitleDialog(vm: MainViewModel, info: MediaInfo, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Subtitles") },
+        title = { Text(Strings.get(R.string.subtitle_ui_subtitles)) },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 info.subtitles.forEach { t ->
@@ -101,13 +103,13 @@ private fun SubtitleDialog(vm: MainViewModel, info: MediaInfo, onDismiss: () -> 
                 }
                 if (vm.advanced) {
                     Text(
-                        "Save as",
+                        Strings.get(R.string.subtitle_ui_save_as),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SubtitleMode.entries.forEach { m ->
-                            QuietChip(vm.subMode == m, { vm.chooseSubMode(m) }, m.label)
+                            QuietChip(vm.subMode == m, { vm.chooseSubMode(m) }, Strings.tr(m.label))
                         }
                     }
                     Text(
@@ -119,6 +121,6 @@ private fun SubtitleDialog(vm: MainViewModel, info: MediaInfo, onDismiss: () -> 
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(Strings.get(R.string.settings_screen_done)) } },
     )
 }

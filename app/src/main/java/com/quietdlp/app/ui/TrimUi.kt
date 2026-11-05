@@ -39,13 +39,15 @@ import com.quietdlp.app.MainViewModel
 import com.quietdlp.app.MediaInfo
 import com.quietdlp.app.data.TrimRange
 import kotlin.math.roundToInt
+import com.quietdlp.app.R
+import com.quietdlp.app.Strings
 
 /** Bajar solo un trozo: un interruptor y, al encenderlo, un selector de rango y dos cajas con el tiempo. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TrimSection(vm: MainViewModel, info: MediaInfo) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Trim", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        Text(Strings.get(R.string.trim_ui_trim), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
         Switch(checked = vm.trimOn, onCheckedChange = vm::changeTrimOn)
     }
     if (!vm.trimOn) return
@@ -71,7 +73,7 @@ internal fun TrimSection(vm: MainViewModel, info: MediaInfo) {
         }
     } else {
         Text(
-            "Frames aren't available for this site.",
+            Strings.get(R.string.trim_ui_frames_aren_t_available_for),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -86,16 +88,16 @@ internal fun TrimSection(vm: MainViewModel, info: MediaInfo) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (sb != null) FrameBox(vm.frameAt(vm.trimStart), ratio)
-            TimeField("From", vm.trimStart, vm::setTrimStart, Modifier.fillMaxWidth())
+            TimeField(Strings.get(R.string.trim_ui_from), vm.trimStart, vm::setTrimStart, Modifier.fillMaxWidth())
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (sb != null) FrameBox(vm.frameAt(vm.trimEnd), ratio)
-            TimeField("To", vm.trimEnd, vm::setTrimEnd, Modifier.fillMaxWidth())
+            TimeField(Strings.get(R.string.trim_ui_to), vm.trimEnd, vm::setTrimEnd, Modifier.fillMaxWidth())
         }
     }
     val all = vm.trimStart == 0 && vm.trimEnd == info.durationSec
     Text(
-        if (all) "The whole file." else "Only ${TrimRange.formatTime(vm.trimEnd - vm.trimStart)} is downloaded.",
+        if (all) Strings.get(R.string.trim_ui_the_whole_file) else Strings.get(R.string.trim_ui_only_is_downloaded, TrimRange.formatTime(vm.trimEnd - vm.trimStart)),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -140,7 +142,7 @@ private fun TimeField(label: String, seconds: Int, onCommit: (Int) -> Int, modif
         label = { Text(label) },
         singleLine = true,
         isError = bad,
-        supportingText = if (bad) ({ Text("Use m:ss, like 1:30") }) else null,
+        supportingText = if (bad) ({ Text(Strings.get(R.string.trim_ui_use_m_ss_like_1)) }) else null,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { commit() }),
         modifier = modifier.onFocusChanged {

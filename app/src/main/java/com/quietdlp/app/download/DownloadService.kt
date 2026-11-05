@@ -62,6 +62,8 @@ import java.io.FileNotFoundException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import com.quietdlp.app.R
+import com.quietdlp.app.Strings
 
 /**
  * Servicio en primer plano que descarga de uno en uno. Al ser "foreground" Android no lo mata
@@ -250,7 +252,7 @@ class DownloadService : Service() {
         ServiceCompat.startForeground(
             this,
             NOTIF_PROGRESS,
-            baseNotification("QuietDLP", "Getting ready…", -1).build(),
+            baseNotification(Strings.get(R.string.settings_screen_quietdlp_2), Strings.get(R.string.download_service_getting_ready), -1).build(),
             if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
         )
 
@@ -408,7 +410,7 @@ class DownloadService : Service() {
     private fun handleCancel(id: String) {
         cancelled.add(id)
         DownloadRepository.update(id) {
-            if (it.isActive) it.copy(state = State.CANCELED, message = "Canceled") else it
+            if (it.isActive) it.copy(state = State.CANCELED, message = Strings.get(R.string.main_screen_canceled)) else it
         }
         // Matar el proceso bloquea un instante: no hacerlo en el hilo principal.
         scope.launch {
@@ -442,7 +444,7 @@ class DownloadService : Service() {
             var slowed = 0
             while (true) {
                 // Con "solo Wi-Fi" no se empieza (ni se retoma) con datos móviles.
-                if (!awaitNetworkAllowed(item)) error("Canceled")
+                if (!awaitNetworkAllowed(item)) error(Strings.get(R.string.main_screen_canceled))
                 try {
                     attempt(item, tmp)
                     return
@@ -454,7 +456,7 @@ class DownloadService : Service() {
                     if (Errors.isRateLimited(t) && slowed < MAX_RATE_WAITS) {
                         slowed++
                         gate.limit = 1
-                        val msg = "Site is busy, slowing down…"
+                        val msg = Strings.get(R.string.download_service_site_is_busy_slowing_down)
                         setState(id, State.QUEUED, msg)
                         notifyProgress(item, msg, -1, force = true)
                         delay(RATE_WAIT_MS * slowed)
@@ -463,7 +465,7 @@ class DownloadService : Service() {
                     // Sin internet: esperar a que vuelva y seguir donde se quedó (yt-dlp retoma los .part).
                     if (waits >= MAX_NET_WAITS || !Errors.isNetwork(t)) throw t
                     waits++
-                    val msg = "Waiting for connection…"
+                    val msg = Strings.get(R.string.download_service_waiting_for_connection)
                     setState(id, State.QUEUED, msg)
                     notifyProgress(item, msg, -1, force = true)
                     if (!waitForNetwork(id, waits)) throw t
@@ -473,7 +475,7 @@ class DownloadService : Service() {
             throw e
         } catch (t: Throwable) {
             if (id in cancelled) {
-                setState(id, State.CANCELED, "Canceled")
+                setState(id, State.CANCELED, Strings.get(R.string.main_screen_canceled))
             } else {
                 // Si falta iniciar sesión, la app guía al usuario (aviso + abrir la página de login).
                 val loginHost = if (Errors.isLoginRequired(t)) {
@@ -489,7 +491,7 @@ class DownloadService : Service() {
                 if (item.groupId == null) {
                     notifyResult(
                         id, item.title, ok = false,
-                        error = if (loginHost != null) "Sign-in required. Tap to continue." else msg,
+                        error = if (loginHost != null) Strings.get(R.string.download_service_sign_in_required_tap_to) else msg,
                         item = item, loginHost = loginHost,
                     )
                 }
@@ -512,7 +514,7 @@ class DownloadService : Service() {
             if (!(item.wifiOnly || prefs.wifiOnly) || !Connectivity.isMetered(this)) return true
             if (!shown) {
                 shown = true
-                val msg = "Waiting for Wi-Fi…"
+                val msg = Strings.get(R.string.main_view_model_waiting_for_wi_fi)
                 setState(id, State.QUEUED, msg)
                 notifyProgress(item, msg, -1, force = true)
             }
@@ -529,13 +531,13 @@ class DownloadService : Service() {
         val done = members.count { it.state == State.DONE }
         val failed = members.count { it.state == State.FAILED }
         val text = buildString {
-            append("$done of ${members.size} saved")
-            if (failed > 0) append(" · $failed failed")
+            append(Strings.get(R.string.download_service_of_saved, done, members.size))
+            if (failed > 0) append(" · " + Strings.get(R.string.notif_n_failed, failed))
         }
-        val title = members.firstNotNullOfOrNull { it.groupTitle } ?: "Downloads"
+        val title = members.firstNotNullOfOrNull { it.groupTitle } ?: Strings.get(R.string.main_screen_downloads)
         val builder = NotificationCompat.Builder(this, CH_RESULT)
             .setSmallIcon(if (failed == 0) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error)
-            .setContentTitle(if (failed == 0) "Downloads complete" else "Downloads finished")
+            .setContentTitle(if (failed == 0) Strings.get(R.string.download_service_downloads_complete) else Strings.get(R.string.download_service_downloads_finished))
             .setContentText("$title — $text")
             .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$text"))
             .setContentIntent(openAppIntent())
@@ -552,11 +554,11 @@ class DownloadService : Service() {
             if (!HistoryGroups.mustWait(DownloadRepository.items.value, me) { it in started }) return
             if (!shown) {
                 shown = true
-                setState(id, State.PROCESSING, "Waiting for the files before it…")
+                setState(id, State.PROCESSING, Strings.get(R.string.download_service_waiting_for_the_files_before))
             }
             delay(300)
         }
-        error("Canceled")
+        error(Strings.get(R.string.main_screen_canceled))
     }
 
 
@@ -571,9 +573,9 @@ class DownloadService : Service() {
     private fun conversionMessage(t: Throwable): String {
         val text = (t.message ?: t.toString()).removePrefix("ERROR:").trim()
         return when (t) {
-            is FileNotFoundException, is SecurityException -> "The original file isn't available anymore."
+            is FileNotFoundException, is SecurityException -> Strings.get(R.string.download_service_the_original_file_isn_t)
             is IllegalStateException -> text.take(220)
-            else -> "Couldn't convert: $text".take(220)
+            else -> Strings.get(R.string.download_service_couldn_t_convert, text).take(220)
         }
     }
 
@@ -631,12 +633,12 @@ class DownloadService : Service() {
         val id = item.id
         val tmp = File(cacheDir, "cv/$id").apply { mkdirs() }
         try {
-            setState(id, State.PREPARING, "Getting ready…")
-            notifyProgress(item, "Getting ready…", -1, force = true)
+            setState(id, State.PREPARING, Strings.get(R.string.download_service_getting_ready))
+            notifyProgress(item, Strings.get(R.string.download_service_getting_ready), -1, force = true)
             Engine.ensureReady(applicationContext)
 
             val plan = prepare(tmp)
-            if (id in cancelled) error("Canceled")
+            if (id in cancelled) error(Strings.get(R.string.main_screen_canceled))
 
             val out = plan.output
             Ffmpeg.run(applicationContext, id, plan.command, plan.totalMs) { pct ->
@@ -645,15 +647,15 @@ class DownloadService : Service() {
                     DownloadRepository.update(id) {
                         it.copy(state = State.DOWNLOADING, progress = pct.toFloat(), message = null)
                     }
-                    notifyProgress(item, "Converting… $pct%", pct)
+                    notifyProgress(item, Strings.get(R.string.download_service_converting, pct), pct)
                 } else {
-                    setState(id, State.PROCESSING, "Converting…")
-                    notifyProgress(item, "Converting…", -1)
+                    setState(id, State.PROCESSING, Strings.get(R.string.download_service_converting_2))
+                    notifyProgress(item, Strings.get(R.string.download_service_converting_2), -1)
                 }
             }
             if (!out.exists() || out.length() == 0L) error("ffmpeg finished but produced no file")
 
-            setState(id, State.PROCESSING, "Saving…")
+            setState(id, State.PROCESSING, Strings.get(R.string.download_service_saving))
             val saved = MediaSaver.publish(applicationContext, out)
             DownloadRepository.update(id) {
                 it.copy(
@@ -661,16 +663,16 @@ class DownloadService : Service() {
                     savedUris = listOf(saved.uri.toString()), mime = saved.mime,
                 )
             }
-            notifyResult(id, item.title, ok = true, saved = saved, shareUris = listOf(saved.uri), what = "Conversion")
+            notifyResult(id, item.title, ok = true, saved = saved, shareUris = listOf(saved.uri), conversion = true)
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
             if (id in cancelled) {
-                setState(id, State.CANCELED, "Canceled")
+                setState(id, State.CANCELED, Strings.get(R.string.main_screen_canceled))
             } else {
                 val msg = conversionMessage(t)
                 DownloadRepository.update(id) { it.copy(state = State.FAILED, message = msg) }
-                notifyResult(id, item.title, ok = false, error = msg, what = "Conversion")
+                notifyResult(id, item.title, ok = false, error = msg, conversion = true)
             }
         } finally {
             cancelled.remove(id)
@@ -683,8 +685,8 @@ class DownloadService : Service() {
         val id = item.id
         embeddedSubs -= id
         embeddedCover -= id
-        setState(id, State.PREPARING, "Getting ready…")
-        notifyProgress(item, "Getting ready…", -1, force = true)
+        setState(id, State.PREPARING, Strings.get(R.string.download_service_getting_ready))
+        notifyProgress(item, Strings.get(R.string.download_service_getting_ready), -1, force = true)
 
         val free = StatFs(cacheDir.absolutePath).availableBytes
         if (FreeSpace.isLow(free)) error(FreeSpace.message(free))
@@ -734,7 +736,7 @@ class DownloadService : Service() {
                     // Casi siempre es yt-dlp desactualizado: actualizar una vez y reintentar.
                     if (!retried && Engine.canForceUpdate(prefs)) {
                         retried = true
-                        notifyProgress(item, "Updating yt-dlp…", -1, force = true)
+                        notifyProgress(item, Strings.get(R.string.download_service_updating_yt_dlp), -1, force = true)
                         runCatching { Engine.update(applicationContext, prefs) }
                         continue
                     }
@@ -746,7 +748,7 @@ class DownloadService : Service() {
         }
 
         awaitTurn(item)
-        setState(id, State.PROCESSING, "Saving…")
+        setState(id, State.PROCESSING, Strings.get(R.string.download_service_saving))
         // Una publicación con varios vídeos (p. ej. un carrusel) genera varios archivos:
         // se guardan todos, no solo el más grande.
         val all = tmp.listFiles()
@@ -792,7 +794,7 @@ class DownloadService : Service() {
         cookiesOff -= id
         val saved = savedAll.first()
         val title = Errors.cleanTitle(files.first()) +
-            if (files.size > 1) " (+${files.size - 1} more)" else ""
+            if (files.size > 1) " " + Strings.get(R.string.n_more_files, files.size - 1) else ""
         DownloadRepository.update(id) {
             it.copy(
                 state = State.DONE,
@@ -811,9 +813,9 @@ class DownloadService : Service() {
 
     /** El aviso de lo que se pidió y no se pudo meter en el archivo (null si todo salió). */
     private fun missingExtras(noSubs: Boolean, noCover: Boolean): String? = when {
-        noSubs && noCover -> "Saved without subtitles or cover image."
-        noSubs -> "Saved without subtitles."
-        noCover -> "Saved without cover image."
+        noSubs && noCover -> Strings.get(R.string.download_service_saved_without_subtitles_or_cover)
+        noSubs -> Strings.get(R.string.download_service_saved_without_subtitles)
+        noCover -> Strings.get(R.string.download_service_saved_without_cover_image)
         else -> null
     }
 
@@ -836,8 +838,8 @@ class DownloadService : Service() {
     private val audioExt = setOf("m4a", "mp3", "opus", "aac", "ogg", "wav", "flac", "weba", "mka")
 
     private fun downloadPhotos(item: DownloadItem, dir: File) {
-        setState(item.id, State.PROCESSING, "Downloading photos…")
-        notifyProgress(item, "Downloading photos…", -1, force = true)
+        setState(item.id, State.PROCESSING, Strings.get(R.string.download_service_downloading_photos))
+        notifyProgress(item, Strings.get(R.string.download_service_downloading_photos), -1, force = true)
         // Lo que llega de una galería seguida es el enlace directo de cada archivo.
         if (item.followId != null && item.quality.kind == Kind.PHOTO) GalleryDl.fetchDirect(item.id, item.url, dir)
         else GalleryDl.download(applicationContext, item.id, item.url, dir, item.photoLimit)
@@ -925,9 +927,9 @@ class DownloadService : Service() {
                 line.contains("[EmbedThumbnail]") || line.contains("[ThumbnailsConvertor]")
             if (processing) {
                 DownloadRepository.update(id) {
-                    it.copy(state = State.PROCESSING, message = "Processing…")
+                    it.copy(state = State.PROCESSING, message = Strings.get(R.string.download_service_processing))
                 }
-                notifyProgress(item, "Processing…", -1)
+                notifyProgress(item, Strings.get(R.string.download_service_processing), -1)
             } else if (progress >= 0f && progress != lastPct) {
                 lastPct = progress
                 DownloadRepository.update(id) {
@@ -938,7 +940,7 @@ class DownloadService : Service() {
                         message = null,
                     )
                 }
-                notifyProgress(item, "Downloading… ${progress.toInt()}%", progress.toInt())
+                notifyProgress(item, Strings.get(R.string.main_screen_downloading, progress.toInt()), progress.toInt())
             }
         }
     }
@@ -952,13 +954,13 @@ class DownloadService : Service() {
     private fun createChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         nm.createNotificationChannel(
-            NotificationChannel(CH_PROGRESS, "Downloads in progress", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(CH_PROGRESS, Strings.get(R.string.download_service_downloads_in_progress), NotificationManager.IMPORTANCE_LOW),
         )
         // El canal "result" sonaba (importancia por defecto). Android no deja bajar la importancia
         // de un canal ya creado, así que se borra y se usa otro silencioso.
         nm.deleteNotificationChannel("result")
         nm.createNotificationChannel(
-            NotificationChannel(CH_RESULT, "Finished downloads", NotificationManager.IMPORTANCE_LOW).apply {
+            NotificationChannel(CH_RESULT, Strings.get(R.string.download_service_finished_downloads), NotificationManager.IMPORTANCE_LOW).apply {
                 setSound(null, null)
                 enableVibration(false)
             },
@@ -994,10 +996,10 @@ class DownloadService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val n: Notification = (
-            if (multi) baseNotification("QuietDLP", "$left downloads left", -1)
+            if (multi) baseNotification(Strings.get(R.string.settings_screen_quietdlp_2), Strings.get(R.string.download_service_downloads_left, left), -1)
             else baseNotification(item.title, text, percent)
             )
-            .addAction(0, if (multi) "Cancel all" else "Cancel", cancelIntent)
+            .addAction(0, if (multi) Strings.get(R.string.group_ui_cancel_all) else Strings.get(R.string.settings_screen_cancel), cancelIntent)
             .build()
         runCatching { nm.notify(NOTIF_PROGRESS, n) }
     }
@@ -1011,7 +1013,7 @@ class DownloadService : Service() {
         item: DownloadItem? = null,
         loginHost: String? = null,
         shareUris: List<Uri> = emptyList(),
-        what: String = "Download",
+        conversion: Boolean = false,
     ) {
         val contentIntent = if (!ok && item != null && loginHost != null) {
             // Al tocar el aviso se abre la app directamente con la explicación de inicio de sesión.
@@ -1042,7 +1044,16 @@ class DownloadService : Service() {
             .setSmallIcon(
                 if (ok) android.R.drawable.stat_sys_download_done else android.R.drawable.stat_notify_error,
             )
-            .setContentTitle(if (ok) "$what complete" else "$what failed")
+            .setContentTitle(
+                Strings.get(
+                    when {
+                        conversion && ok -> R.string.notif_conversion_complete
+                        conversion -> R.string.notif_conversion_failed
+                        ok -> R.string.notif_download_complete
+                        else -> R.string.notif_download_failed
+                    },
+                ),
+            )
             .setContentText(if (ok) title else (error ?: title))
             .setStyle(NotificationCompat.BigTextStyle().bigText(if (ok) title else (error ?: title)))
             .setContentIntent(contentIntent)
@@ -1052,7 +1063,7 @@ class DownloadService : Service() {
                 this, id.hashCode() + 1, Sharing.chooser(shareUris, saved?.mime),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            builder.addAction(0, "Share", share)
+            builder.addAction(0, Strings.get(R.string.group_ui_share), share)
         }
         runCatching { nm.notify(id.hashCode(), builder.build()) }
     }

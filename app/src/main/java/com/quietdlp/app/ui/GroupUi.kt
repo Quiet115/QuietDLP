@@ -73,6 +73,8 @@ import com.quietdlp.app.data.HistoryRow
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.Layouts
 import com.quietdlp.app.data.QualityLevel
+import com.quietdlp.app.R
+import com.quietdlp.app.Strings
 
 // ───────────────────────── tarjeta de un grupo ─────────────────────────
 
@@ -127,11 +129,11 @@ fun GroupCard(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     when {
                         group.active > 0 -> StatusPill("${group.total - group.active} / ${group.total}", Tone.ACTIVE)
-                        group.failed > 0 -> StatusPill("Done with errors", Tone.BAD)
-                        group.done == group.total -> StatusPill("Done", Tone.GOOD)
-                        else -> StatusPill("Stopped", Tone.NEUTRAL)
+                        group.failed > 0 -> StatusPill(Strings.get(R.string.group_ui_done_with_errors), Tone.BAD)
+                        group.done == group.total -> StatusPill(Strings.get(R.string.settings_screen_done), Tone.GOOD)
+                        else -> StatusPill(Strings.get(R.string.group_ui_stopped), Tone.NEUTRAL)
                     }
-                    if (group.items.any { it.fresh }) StatusPill("New", Tone.NEW)
+                    if (group.items.any { it.fresh }) StatusPill(Strings.get(R.string.group_ui_new), Tone.NEW)
                     Text(
                         groupSummary(group),
                         style = MaterialTheme.typography.bodySmall,
@@ -157,9 +159,9 @@ fun GroupCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (group.active > 0) TextButton(onClick = { vm.cancelAll(group.items) }) { Text("Cancel all") }
-                    else if (group.failed > 0) OutlinedButton(onClick = { vm.retryFailed(group.items) }) { Text("Retry failed") }
-                    TextButton(onClick = onOpen) { Text("View") }
+                    if (group.active > 0) TextButton(onClick = { vm.cancelAll(group.items) }) { Text(Strings.get(R.string.group_ui_cancel_all)) }
+                    else if (group.failed > 0) OutlinedButton(onClick = { vm.retryFailed(group.items) }) { Text(Strings.get(R.string.group_ui_retry_failed)) }
+                    TextButton(onClick = onOpen) { Text(Strings.get(R.string.group_ui_view)) }
                 }
             }
         }
@@ -175,15 +177,15 @@ fun GroupScreen(group: HistoryRow.Group, vm: MainViewModel, onClose: () -> Unit)
     if (askRemove) {
         AlertDialog(
             onDismissRequest = { askRemove = false },
-            title = { Text("Remove ${group.total} files") },
-            text = { Text("Remove them from the list only, or delete the files too.") },
+            title = { Text(Strings.get(R.string.group_ui_remove_files, group.total)) },
+            text = { Text(Strings.get(R.string.group_ui_remove_them_from_the_list)) },
             confirmButton = {
-                TextButton(onClick = { askRemove = false; vm.deleteMany(group.items, deleteFiles = false) }) { Text("List only") }
+                TextButton(onClick = { askRemove = false; vm.deleteMany(group.items, deleteFiles = false) }) { Text(Strings.get(R.string.group_ui_list_only)) }
             },
             dismissButton = {
                 Row {
-                    TextButton(onClick = { askRemove = false }) { Text("Cancel") }
-                    TextButton(onClick = { askRemove = false; vm.deleteMany(group.items, deleteFiles = true) }) { Text("Delete files too") }
+                    TextButton(onClick = { askRemove = false }) { Text(Strings.get(R.string.settings_screen_cancel)) }
+                    TextButton(onClick = { askRemove = false; vm.deleteMany(group.items, deleteFiles = true) }) { Text(Strings.get(R.string.group_ui_delete_files_too)) }
                 }
             },
         )
@@ -193,7 +195,7 @@ fun GroupScreen(group: HistoryRow.Group, vm: MainViewModel, onClose: () -> Unit)
             TopAppBar(
                 title = { Text(group.title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
-                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = Strings.get(R.string.settings_screen_back)) }
                 },
             )
         },
@@ -216,9 +218,9 @@ fun GroupScreen(group: HistoryRow.Group, vm: MainViewModel, onClose: () -> Unit)
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        if (group.active > 0) TextButton(onClick = { vm.cancelAll(group.items) }) { Text("Cancel all") }
-                        if (group.failed > 0 && group.active == 0) OutlinedButton(onClick = { vm.retryFailed(group.items) }) { Text("Retry failed") }
-                        if (group.active == 0) TextButton(onClick = { askRemove = true }) { Text("Remove all") }
+                        if (group.active > 0) TextButton(onClick = { vm.cancelAll(group.items) }) { Text(Strings.get(R.string.group_ui_cancel_all)) }
+                        if (group.failed > 0 && group.active == 0) OutlinedButton(onClick = { vm.retryFailed(group.items) }) { Text(Strings.get(R.string.group_ui_retry_failed)) }
+                        if (group.active == 0) TextButton(onClick = { askRemove = true }) { Text(Strings.get(R.string.group_ui_remove_all)) }
                     }
                 }
                 items(group.items, key = { it.id }) { DownloadRow(it, vm, selecting = false, isSelected = false) }
@@ -238,7 +240,7 @@ private fun kindOfMime(mime: String?): Kind = when {
 private fun displayName(ctx: Context, uri: String): String = runCatching {
     ctx.contentResolver.query(Uri.parse(uri), arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         ?.use { if (it.moveToFirst()) it.getString(0) else null }
-}.getOrNull() ?: "File"
+}.getOrNull() ?: Strings.get(R.string.group_ui_file)
 
 /** Los archivos de una publicación con varias fotos o vídeos, uno por uno: abrir, compartir o convertir cada uno. */
 @Composable
@@ -272,16 +274,16 @@ fun FilesDialog(item: DownloadItem, vm: MainViewModel, onDismiss: () -> Unit) {
                             Row {
                                 IconButton(onClick = {
                                     runCatching { ctx.startActivity(Sharing.chooser(listOf(Uri.parse(uri)), mime)) }
-                                }) { Icon(Icons.Default.Share, contentDescription = "Share") }
-                                IconButton(onClick = { openFile(ctx, file) }) { Icon(Icons.Default.PlayArrow, contentDescription = "Open") }
+                                }) { Icon(Icons.Default.Share, contentDescription = Strings.get(R.string.group_ui_share)) }
+                                IconButton(onClick = { openFile(ctx, file) }) { Icon(Icons.Default.PlayArrow, contentDescription = Strings.get(R.string.group_ui_open)) }
                             }
-                            if (ConvertTargets.canConvert(mime)) TextButton(onClick = { convert = file }) { Text("Convert") }
+                            if (ConvertTargets.canConvert(mime)) TextButton(onClick = { convert = file }) { Text(Strings.get(R.string.group_ui_convert)) }
                         }
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(Strings.get(R.string.group_ui_close)) } },
     )
 }
 
@@ -299,22 +301,22 @@ fun SelectionDialog(vm: MainViewModel, prompt: SelectionPrompt) {
     val level = QualityLevel.fromQuality(quality)
     AlertDialog(
         onDismissRequest = vm::dismissSelection,
-        title = { Text("Download ${prompt.entries.size} files?") },
+        title = { Text(Strings.get(R.string.group_ui_download_files, prompt.entries.size)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(prompt.title, style = MaterialTheme.typography.bodySmall, color = muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("Format for all", style = MaterialTheme.typography.labelMedium, color = muted)
+                Text(Strings.get(R.string.group_ui_format_for_all), style = MaterialTheme.typography.labelMedium, color = muted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QuietChip(kind == Kind.VIDEO, { quality = level.quality(Kind.VIDEO) }, "Video")
-                    QuietChip(kind == Kind.AUDIO, { quality = level.quality(Kind.AUDIO) }, "Audio")
+                    QuietChip(kind == Kind.VIDEO, { quality = level.quality(Kind.VIDEO) }, Strings.get(R.string.settings_screen_video))
+                    QuietChip(kind == Kind.AUDIO, { quality = level.quality(Kind.AUDIO) }, Strings.get(R.string.group_ui_audio))
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    QualityLevel.entries.forEach { l -> QuietChip(level == l, { quality = l.quality(kind) }, l.label) }
+                    QualityLevel.entries.forEach { l -> QuietChip(level == l, { quality = l.quality(kind) }, Strings.tr(l.label)) }
                 }
-                Text(quality.label(), style = MaterialTheme.typography.bodySmall, color = muted)
+                Text(Strings.tr(quality.label()), style = MaterialTheme.typography.bodySmall, color = muted)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { chosen = prompt.entries.map { it.url }.toSet() }) { Text("Select all") }
-                    TextButton(onClick = { chosen = emptySet() }) { Text("None") }
+                    TextButton(onClick = { chosen = prompt.entries.map { it.url }.toSet() }) { Text(Strings.get(R.string.group_ui_select_all)) }
+                    TextButton(onClick = { chosen = emptySet() }) { Text(Strings.get(R.string.group_ui_none)) }
                 }
                 LazyColumn(Modifier.heightIn(max = 240.dp)) {
                     items(prompt.entries, key = { it.url }) { e ->
@@ -337,8 +339,8 @@ fun SelectionDialog(vm: MainViewModel, prompt: SelectionPrompt) {
                 ) {
                     Checkbox(checked = dontAsk, onCheckedChange = { dontAsk = it })
                     Column {
-                        Text("Don't ask again", style = MaterialTheme.typography.bodyMedium)
-                        Text("Change it any time in Settings.", style = MaterialTheme.typography.bodySmall, color = muted)
+                        Text(Strings.get(R.string.group_ui_don_t_ask_again), style = MaterialTheme.typography.bodyMedium)
+                        Text(Strings.get(R.string.group_ui_change_it_any_time_in), style = MaterialTheme.typography.bodySmall, color = muted)
                     }
                 }
             }
@@ -347,9 +349,9 @@ fun SelectionDialog(vm: MainViewModel, prompt: SelectionPrompt) {
             TextButton(
                 onClick = { vm.confirmSelection(prompt.entries.filter { it.url in chosen }, quality, dontAsk) },
                 enabled = chosen.isNotEmpty(),
-            ) { Text("Download ${chosen.size}") }
+            ) { Text(Strings.get(R.string.group_ui_download, chosen.size)) }
         },
-        dismissButton = { TextButton(onClick = vm::dismissSelection) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = vm::dismissSelection) { Text(Strings.get(R.string.settings_screen_cancel)) } },
     )
 }
 
@@ -358,10 +360,10 @@ fun SelectionDialog(vm: MainViewModel, prompt: SelectionPrompt) {
 fun DataPromptDialog(vm: MainViewModel) {
     AlertDialog(
         onDismissRequest = vm::dismissDataPrompt,
-        title = { Text("Mobile data") },
-        text = { Text("You're on mobile data. Downloading may use your plan or balance. Wi-Fi is recommended.") },
-        confirmButton = { TextButton(onClick = { vm.answerDataPrompt(false) }) { Text("Download now") } },
-        dismissButton = { TextButton(onClick = { vm.answerDataPrompt(true) }) { Text("Wait for Wi-Fi") } },
+        title = { Text(Strings.get(R.string.group_ui_mobile_data)) },
+        text = { Text(Strings.get(R.string.group_ui_you_re_on_mobile_data)) },
+        confirmButton = { TextButton(onClick = { vm.answerDataPrompt(false) }) { Text(Strings.get(R.string.group_ui_download_now)) } },
+        dismissButton = { TextButton(onClick = { vm.answerDataPrompt(true) }) { Text(Strings.get(R.string.group_ui_wait_for_wi_fi)) } },
     )
 }
 
@@ -371,7 +373,7 @@ fun openBatterySetting(ctx: Context, listOnly: Boolean = false) {
     val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(Uri.parse("package:${ctx.packageName}"))
     val ok = !listOnly && runCatching { ctx.startActivity(direct) }.isSuccess
     if (!ok && runCatching { ctx.startActivity(list) }.isFailure) {
-        Toast.makeText(ctx, "Couldn't open the battery settings", Toast.LENGTH_SHORT).show()
+        Toast.makeText(ctx, Strings.get(R.string.group_ui_couldn_t_open_the_battery), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -383,17 +385,17 @@ fun BatteryPromptDialog(vm: MainViewModel) {
     var dontAsk by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = { vm.dismissBatteryPrompt(dontAsk) },
-        title = { Text("Long queue") },
+        title = { Text(Strings.get(R.string.group_ui_long_queue)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Android may pause QuietDLP when the screen is off. Let it run without battery limits so the queue finishes.")
-                Text("You can undo this in Settings.", style = MaterialTheme.typography.bodySmall, color = muted)
+                Text(Strings.get(R.string.group_ui_android_may_pause_quietdlp_when))
+                Text(Strings.get(R.string.group_ui_you_can_undo_this_in), style = MaterialTheme.typography.bodySmall, color = muted)
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { dontAsk = !dontAsk },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked = dontAsk, onCheckedChange = { dontAsk = it })
-                    Text("Don't remind me", style = MaterialTheme.typography.bodyMedium)
+                    Text(Strings.get(R.string.group_ui_don_t_remind_me), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
@@ -401,8 +403,8 @@ fun BatteryPromptDialog(vm: MainViewModel) {
             TextButton(onClick = {
                 vm.dismissBatteryPrompt(dontAsk)
                 openBatterySetting(ctx)
-            }) { Text("Open setting") }
+            }) { Text(Strings.get(R.string.group_ui_open_setting)) }
         },
-        dismissButton = { TextButton(onClick = { vm.dismissBatteryPrompt(dontAsk) }) { Text("Not now") } },
+        dismissButton = { TextButton(onClick = { vm.dismissBatteryPrompt(dontAsk) }) { Text(Strings.get(R.string.group_ui_not_now)) } },
     )
 }

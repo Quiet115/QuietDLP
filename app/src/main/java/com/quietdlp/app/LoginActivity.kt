@@ -43,8 +43,8 @@ class LoginActivity : Activity() {
         val pad = (16 * resources.displayMetrics.density).toInt()
 
         val hint = TextView(this).apply {
-            text = "Sign in to $host, then tap “I'm signed in”. " +
-                "If it offers to save your login, choose “Not now”."
+            text = Strings.get(R.string.login_activity_sign_in_to_then_tap, host) + " " +
+                Strings.get(R.string.login_activity_if_it_offers_to_save)
             setPadding(pad, pad, pad, pad)
             textSize = 14f
             // Fondo blanco fijo: el texto debe ser oscuro también en modo oscuro del sistema.
@@ -67,7 +67,7 @@ class LoginActivity : Activity() {
         }
 
         val done = Button(this).apply {
-            text = "I'm signed in"
+            text = Strings.get(R.string.login_activity_i_m_signed_in)
             setOnClickListener {
                 if (CookieStore.saveFromWebView(this@LoginActivity, host, web.url)) {
                     // Limpia el WebView: la sesión queda solo en el archivo privado de la app.
@@ -76,12 +76,12 @@ class LoginActivity : Activity() {
                     web.clearFormData()
                     web.clearCache(true)
                     web.clearHistory()
-                    Toast.makeText(this@LoginActivity, "Session for $host saved", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@LoginActivity, Strings.get(R.string.login_activity_session_for_saved, host), Toast.LENGTH_SHORT).show()
                     finish()
                 } else {
                     Toast.makeText(
                         this@LoginActivity,
-                        "No session yet. Sign in, then tap again.",
+                        Strings.get(R.string.login_activity_no_session_yet_sign_in),
                         Toast.LENGTH_LONG,
                     ).show()
                 }

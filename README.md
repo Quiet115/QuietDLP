@@ -2,7 +2,7 @@
 
 Open-source video, audio and photo downloader for Android. Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) for video and audio and [gallery-dl](https://github.com/mikf/gallery-dl) for photos and galleries.
 
-Early version (0.4). Free and open source.
+Early version (0.5). Free and open source.
 
 ## What it does
 
@@ -18,6 +18,8 @@ Early version (0.4). Free and open source.
 - **Advanced:** SponsorBlock (remove or mark sponsor parts on YouTube), chapters (keep them or one file per chapter) and file name templates.
 - **Follow a page:** channels, playlists and photo galleries. It checks on its own and downloads only what is new, or just marks it "New". Android doesn't allow starting a download from the background, so on some phones new items start when you open the app.
 - **Site keys:** some photo sites need your own key. Add it in Settings; it stays on your phone and is not in backups.
+- **Settings in tabs**, with a Features tab that lists what the app does and a Feedback tab that opens a ready-made GitHub issue (only the app version, Android version, phone model and language).
+- **English and Spanish**, English by default; change it in Settings, Language.
 - **Backup** of your settings, history and followed pages.
 - **Simple and Advanced mode**, and color palettes: dark, colorful, light, wallpaper colors, or your own.
 - **History** with share and delete, a warning when a link was already downloaded, and automatic retry when the connection drops.

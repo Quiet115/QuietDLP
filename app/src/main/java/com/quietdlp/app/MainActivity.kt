@@ -1,5 +1,6 @@
 package com.quietdlp.app
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
@@ -12,8 +13,10 @@ import com.quietdlp.app.data.AppOrientation
 import com.quietdlp.app.data.Kind
 import com.quietdlp.app.data.Quality
 import com.quietdlp.app.download.DownloadRepository
+import com.quietdlp.app.ui.LanguageStore
 import com.quietdlp.app.ui.MainScreen
 import com.quietdlp.app.ui.QuietTheme
+import com.quietdlp.app.ui.withLanguage
 
 class MainActivity : ComponentActivity() {
 
@@ -32,6 +35,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private val vm: MainViewModel by viewModels()
+
+    // El idioma elegido en Ajustes (inglés si no se eligió otro). Al cambiarlo se recrea la pantalla.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase.withLanguage(LanguageStore(newBase).load()))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
