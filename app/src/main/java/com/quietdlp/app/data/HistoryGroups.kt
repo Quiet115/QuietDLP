@@ -1,6 +1,5 @@
 package com.quietdlp.app.data
 
-/** Una fila de la lista de descargas: un archivo suelto o un grupo (lista de reproducción, varios enlaces). */
 sealed interface HistoryRow {
     val key: String
 
@@ -15,17 +14,11 @@ sealed interface HistoryRow {
         val failed: Int get() = items.count { it.state == State.FAILED }
         val active: Int get() = items.count { it.isActive }
 
-        /** El archivo que da la miniatura del grupo: el primero que ya tiene imagen. */
         val cover: DownloadItem get() = items.firstOrNull { it.savedUris.isNotEmpty() } ?: items.first()
     }
 }
 
-/** Agrupa y ordena las descargas (funciones puras, para poder probarlas). */
 object HistoryGroups {
-    /**
-     * Junta las descargas con el mismo grupo en una sola fila, que queda donde estaba la primera de ellas.
-     * Dentro del grupo van en el orden original del enlace. Un grupo al que solo le queda un archivo se ve como uno suelto.
-     */
     fun rows(items: List<DownloadItem>): List<HistoryRow> {
         val byGroup = items.filter { it.groupId != null }.groupBy { it.groupId!! }
         val seen = HashSet<String>()
@@ -44,12 +37,7 @@ object HistoryGroups {
         return out
     }
 
-    /**
-     * true si [item] tiene que esperar antes de guardar su archivo: queda alguno anterior del mismo grupo sin terminar.
-     * Así los archivos se guardan siempre en el orden del enlace, aunque se descarguen a la vez y pesen distinto.
-     * [started] dice si un archivo ya salió de la cola: uno que sigue esperando su turno no frena a los demás
-     * (si no, un reintento al final de la cola bloquearía a los que ya van por delante).
-     */
+    // Solo frenan los anteriores ya iniciados: un reintento en cola no debe bloquearlos.
     fun mustWait(all: List<DownloadItem>, item: DownloadItem, started: (String) -> Boolean = { true }): Boolean {
         val gid = item.groupId ?: return false
         return all.any { it.groupId == gid && it.groupIndex < item.groupIndex && it.isActive && started(it.id) }

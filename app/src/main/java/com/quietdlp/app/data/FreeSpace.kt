@@ -1,8 +1,7 @@
 package com.quietdlp.app.data
 
-/** Comprobación de espacio libre antes de descargar (funciones puras, para poder probarlas). */
 object FreeSpace {
-    /** El tamaño no se conoce antes de descargar; los vídeos largos pesan cientos de MB y se copian dos veces. */
+    // El tamaño se desconoce al empezar y el archivo se copia dos veces.
     const val MIN_FREE_BYTES = 300L * 1024 * 1024
 
     fun isLow(freeBytes: Long, minBytes: Long = MIN_FREE_BYTES): Boolean = freeBytes < minBytes

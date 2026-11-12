@@ -1,6 +1,6 @@
 package com.quietdlp.app.data
 
-/** Cómo se orienta la pantalla de la app. [AUTO] sigue el giro del teléfono (y su bloqueo de rotación). */
+// La orientación automática respeta el bloqueo de rotación del teléfono.
 enum class AppOrientation(val key: String, val label: String) {
     AUTO("auto", "Auto"),
     PORTRAIT("portrait", "Portrait"),
@@ -11,7 +11,6 @@ enum class AppOrientation(val key: String, val label: String) {
     }
 }
 
-/** Desde qué ancho (en dp) la pantalla principal pasa a dos columnas. */
 object Layouts {
     const val TWO_COLUMNS_FROM_DP = 840
     const val MAX_SINGLE_COLUMN_DP = 640
