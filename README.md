@@ -18,14 +18,14 @@ Early version (0.5). Free and open source.
 - **Advanced:** SponsorBlock (remove or mark sponsor parts on YouTube), chapters (keep them or one file per chapter) and file name templates.
 - **Follow a page:** channels, playlists and photo galleries. It checks on its own and downloads only what is new, or just marks it "New". Android doesn't allow starting a download from the background, so on some phones new items start when you open the app.
 - **Site keys:** some photo sites need your own key. Add it in Settings; it stays on your phone and is not in backups.
-- **Settings in tabs**, with a Features tab that lists what the app does and a Feedback tab that opens a ready-made GitHub issue (only the app version, Android version, phone model and language).
+- **Settings in tabs**, with search, a Permissions tab, a Features tab that lists what the app does and a Feedback tab that opens a ready-made GitHub issue (only the app version, Android version, phone model and language).
 - **English and Spanish**, English by default; change it in Settings, Language.
-- **Backup** of your settings, history and followed pages.
-- **Simple and Advanced mode**, and color palettes: dark, colorful, light, wallpaper colors, or your own.
+- **Settings profile:** export all your settings, theme and language to one file and import it on another phone. History and followed pages are optional. Site keys, sessions and permissions are never included.
+- **Send to QuietRingtones:** trim a downloaded song and set it as a ringtone, notification or alarm, if you have that app.
+- **Simple and Advanced mode**, and color palettes: dark, colorful, light, wallpaper colors, or your own, with an option to follow the phone's dark or light mode.
 - **History** with share and delete, a warning when a link was already downloaded, and automatic retry when the connection drops.
-- **Automatic updates** for yt-dlp, gallery-dl and the app itself. On by default, can be turned off in Settings.
+- **Automatic updates** for yt-dlp, gallery-dl and the app itself, with a short notice when a new version is out. On by default, can be turned off in Settings.
 - **Sessions** for content that requires signing in, or by importing a `cookies.txt`.
-- No ads, no accounts of its own, no telemetry.
 
 ## Check your copy
 
@@ -41,7 +41,7 @@ A copy could fake that screen, so the comparison is only as good as this page. T
 
 ## Support
 
-QuietDLP is free. If it is useful to you, you can support it at https://ko-fi.com/quiet115 (also in the app: Settings › About).
+If it is useful to you, you can support it at https://ko-fi.com/quiet115 (also in Settings › About).
 
 ## Build
 
@@ -62,7 +62,7 @@ APKs end up in `app/build/outputs/apk/`. Install by copying one to the phone, or
 1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`.
 2. `./gradlew assembleRelease`.
 3. On GitHub, create a *Release* tagged `vX.Y.Z` and attach the APK. The release text is the changelog users see, so write only what's new in that version.
-4. Set `GITHUB_REPO = "user/repository"` in `Links.kt` (once). Installed apps will notify users.
+4. `GITHUB_REPO` in `Links.kt` must point to your repository: installed apps use it to find updates.
 
 **The signing key matters most.** Android only updates an app when the new version is signed with the same key. Keep `quietdlp-release.jks` and its password backed up. It is never committed (`keystore.properties` and `*.jks` are git-ignored).
 
@@ -89,13 +89,13 @@ Built on [youtubedl-android](https://github.com/yausername/youtubedl-android) (y
 - Private or restricted content may stay unavailable even with a session.
 - Up to 100 photos per link.
 - When a site changes, yt-dlp and gallery-dl take a while to catch up. Updating usually fixes it.
-- App stores tend to reject this kind of app. It is distributed through GitHub.
+- Not on app stores, which tend to reject this kind of app.
 
 ## Privacy
 
 - Sessions live only in the app's private folder and are sent only to their own website.
 - You type your password on the site itself; QuietDLP never sees it and doesn't let the phone save it.
-- The app's only own connections are to GitHub and PyPI, for updates. No personal data is sent.
+- No ads, no accounts of its own, no telemetry. The app's own connections go only to GitHub and PyPI, for updates, and carry no personal data.
 - Copied links are only checked locally, and only a hash of the last one is kept.
 
 Download only content you have the right to save.

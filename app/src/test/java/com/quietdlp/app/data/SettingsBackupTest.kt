@@ -96,4 +96,48 @@ class SettingsBackupTest {
         val back = SettingsBackup.decode(SettingsBackup.encode(mapOf("site_rules" to big)))!!
         assertFalse("site_rules" in back)
     }
+
+    @Test
+    fun everySavedSettingBelongsToATab() {
+        SettingsBackup.KEYS.keys.forEach { assertTrue(it, SettingsBackup.groupOf(it) in SettingsBackup.Group.entries) }
+        assertEquals(SettingsBackup.Group.LANGUAGE, SettingsBackup.groupOf("language"))
+        assertEquals(SettingsBackup.Group.APPEARANCE, SettingsBackup.groupOf("palette_dark"))
+        assertTrue("language" in SettingsBackup.KEYS)
+        assertTrue("follow_system_mode" in SettingsBackup.KEYS)
+    }
+
+    @Test
+    fun secretsAndPhoneThingsNeverEnterAProfile() {
+        val all = mapOf<String, Any?>("site_key" to "secret", "site_user" to "u", "site_address" to "a", "folder_uri" to "content://x", "perm_welcome_seen" to true, "mode" to "audio")
+        val json = SettingsBackup.encode(all)
+        listOf("site_key", "site_user", "site_address", "folder_uri", "perm_welcome_seen").forEach { assertFalse(it, json.contains(it)) }
+    }
+
+    @Test
+    fun aValidProfileIsReadyAndCountsWhatChanges() {
+        val json = SettingsBackup.encode(mapOf("mode" to "audio", "language" to "es", "max_parallel" to 3))
+        val ready = SettingsBackup.check(json) as SettingsBackup.Check.Ready
+        assertEquals("es", ready.values["language"])
+        val changes = SettingsBackup.changes(ready.values, mapOf("mode" to "audio", "language" to "en", "max_parallel" to 2))
+        assertEquals(mapOf(SettingsBackup.Group.LANGUAGE to 1, SettingsBackup.Group.QUEUE to 1), changes)
+    }
+
+    @Test
+    fun damagedAndForeignFilesAreRejected() {
+        assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check("not json {"))
+        assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check("""{"app":"Other","format":1,"settings":{}}"""))
+        assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check("""{"app":"QuietDLP","format":0,"settings":{}}"""))
+    }
+
+    @Test
+    fun aProfileFromAFutureVersionIsRejectedWithItsOwnMessage() {
+        assertEquals(SettingsBackup.Check.FromNewerVersion, SettingsBackup.check("""{"app":"QuietDLP","format":99,"settings":{}}"""))
+    }
+
+    @Test
+    fun unknownSettingsAreIgnoredAndMissingOnesStayAsTheyAre() {
+        val json = """{"app":"QuietDLP","format":1,"settings":{"mode":"audio","brand_new":"x","max_parallel":"wrong type"}}"""
+        val ready = SettingsBackup.check(json) as SettingsBackup.Check.Ready
+        assertEquals(mapOf<String, Any>("mode" to "audio"), ready.values)
+    }
 }

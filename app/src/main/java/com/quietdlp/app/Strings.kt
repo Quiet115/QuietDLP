@@ -36,6 +36,14 @@ object Strings {
         return english
     }
 
+    private var english: Context? = null
+
+    /** Un texto en inglés, sea cual sea el idioma elegido (el buscador de Ajustes busca en los dos). */
+    fun getEnglish(@StringRes id: Int): String {
+        val ctx = english ?: app.withLanguage(Language.ENGLISH).also { english = it }
+        return ctx.getString(id)
+    }
+
     fun get(@StringRes id: Int, vararg args: Any?): String =
         if (args.isEmpty()) localized().getString(id) else localized().getString(id, *args)
 }

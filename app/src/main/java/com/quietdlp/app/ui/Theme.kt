@@ -63,12 +63,16 @@ private val QuietShapes = Shapes(
 
 @Composable
 fun QuietTheme(
-    paletteId: String = Palettes.DEFAULT,
+    chosenPaletteId: String = Palettes.DEFAULT,
     custom: List<PaletteSpec> = emptyList(),
+    followSystem: Boolean = false,
+    darkId: String = Palettes.DEFAULT_DARK,
+    lightId: String = Palettes.DEFAULT_LIGHT,
     content: @Composable () -> Unit,
 ) {
     val ctx = LocalContext.current
     val systemDark = isSystemInDarkTheme()
+    val paletteId = Palettes.effectiveId(chosenPaletteId, followSystem, systemDark, darkId, lightId)
     val useSystem = paletteId == Palettes.SYSTEM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val colors = if (useSystem) {
         if (systemDark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
@@ -78,7 +82,8 @@ fun QuietTheme(
                 // Android antiguo sin colores del sistema: paleta clara u oscura según el modo del móvil.
                 Palettes.find(if (systemDark) "midnight" else "paper", emptyList())
             } else null
-        Palettes.scheme(spec ?: Palettes.presets.first())
+        // Una paleta que ya no existe (por ejemplo una propia borrada): la de serie del modo actual.
+        Palettes.scheme(spec ?: Palettes.find(if (systemDark) Palettes.DEFAULT_DARK else Palettes.DEFAULT_LIGHT, emptyList()) ?: Palettes.presets.first())
     }
 
     // Los iconos de la barra de estado y de navegación tienen que verse sobre el fondo elegido, no sobre el del sistema.

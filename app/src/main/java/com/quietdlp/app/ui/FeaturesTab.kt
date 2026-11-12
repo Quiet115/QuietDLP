@@ -20,6 +20,7 @@ private val features = listOf(
     R.string.feature_subtitles_title to R.string.feature_subtitles_body,
     R.string.feature_trim_title to R.string.feature_trim_body,
     R.string.feature_music_title to R.string.feature_music_body,
+    R.string.feature_ringtones_title to R.string.feature_ringtones_body,
     R.string.feature_cover_title to R.string.feature_cover_body,
     R.string.feature_convert_title to R.string.feature_convert_body,
     R.string.feature_makevideo_title to R.string.feature_makevideo_body,
@@ -30,6 +31,8 @@ private val features = listOf(
     R.string.feature_history_title to R.string.feature_history_body,
     R.string.feature_backup_title to R.string.feature_backup_body,
     R.string.feature_updates_title to R.string.feature_updates_body,
+    R.string.feature_permissions_title to R.string.feature_permissions_body,
+    R.string.feature_search_settings_title to R.string.feature_search_settings_body,
     R.string.feature_appearance_title to R.string.feature_appearance_body,
     R.string.feature_official_title to R.string.feature_official_body,
 )

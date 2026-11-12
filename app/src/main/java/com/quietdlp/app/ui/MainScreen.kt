@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -146,18 +149,6 @@ fun MainScreen(vm: MainViewModel) {
         vm.followAppOpened()
     }
 
-    // Permisos: notificaciones (Android 13+) y almacenamiento (solo Android 9 o anterior).
-    val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions(),
-    ) { }
-    LaunchedEffect(Unit) {
-        val needed = buildList {
-            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
-            if (Build.VERSION.SDK_INT <= 28) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }.filter { ContextCompat.checkSelfPermission(ctx, it) != PackageManager.PERMISSION_GRANTED }
-        if (needed.isNotEmpty()) permLauncher.launch(needed.toTypedArray())
-    }
-
     // "Download again" analiza el enlace arriba del todo: la lista vuelve al principio para que se vea.
     val listState = rememberLazyListState()
     LaunchedEffect(vm.scrollTopRequest) {
@@ -167,7 +158,14 @@ fun MainScreen(vm: MainViewModel) {
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    val notice = rememberUpdateNotice(vm.updateBannerStartedAt, vm.appUpdateBusy, vm::closeUpdateBanner)
+    Column(Modifier.fillMaxSize()) {
+    Box(
+        Modifier.weight(1f).fillMaxWidth().let {
+            // Con el aviso a la vista, ya cubre la barra de navegación: lo de arriba no debe reservarla otra vez.
+            if (notice.visible) it.consumeWindowInsets(WindowInsets.navigationBars) else it
+        },
+    ) {
         Scaffold(
             topBar = {
                 Column {
@@ -239,15 +237,19 @@ fun MainScreen(vm: MainViewModel) {
                 SettingsScreen(vm) { showSettings = false }
             }
         }
+
+        if (!vm.permissionsWelcomeSeen) PermissionsWelcome(vm::finishPermissionsWelcome)
+    }
+    // Aviso de versión nueva, abajo y por encima de todas las pantallas: empuja el contenido hacia arriba en vez de taparlo.
+    UpdateNoticeCard(vm, notice)
     }
 
-    if (vm.showUpdateNotice) UpdateNoticeDialog(vm)
+    if (vm.showUpdateNotice && vm.permissionsWelcomeSeen) UpdateNoticeDialog(vm)
     vm.loginPrompt?.let { LoginPromptDialog(vm, it) }
     vm.duplicatePrompt?.let { DuplicateDialog(vm) }
     vm.selectionPrompt?.let { SelectionDialog(vm, it) }
     vm.dataPrompt?.let { DataPromptDialog(vm) }
     if (vm.batteryPrompt) BatteryPromptDialog(vm)
-    if (vm.showAppUpdate) vm.appUpdate?.let { AppUpdateDialog(vm, it) }
 }
 
 /** Abrir el grupo de una página seguida es verlo: deja de ser nuevo. */
@@ -482,41 +484,6 @@ private fun DuplicateDialog(vm: MainViewModel) {
         text = { Text(if (p.active) Strings.get(R.string.main_screen_this_link_is_already_downloading) else Strings.get(R.string.main_screen_download_it_again)) },
         confirmButton = { TextButton(onClick = vm::confirmDuplicate) { Text(Strings.get(R.string.settings_screen_download)) } },
         dismissButton = { TextButton(onClick = vm::dismissDuplicate) { Text(Strings.get(R.string.settings_screen_cancel)) } },
-    )
-}
-
-/** Aviso de versión nueva de la propia app: descarga, verifica y abre el instalador de Android. */
-@Composable
-private fun AppUpdateDialog(vm: MainViewModel, release: AppUpdater.Release) {
-    val ctx = LocalContext.current
-    AlertDialog(
-        onDismissRequest = { if (!vm.appUpdateBusy) vm.dismissAppUpdate() },
-        title = { Text(Strings.get(R.string.main_screen_new_version_available)) },
-        text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(Strings.get(R.string.main_screen_version, release.version), style = MaterialTheme.typography.titleSmall)
-                if (release.notes.isNotBlank()) {
-                    Text(release.notes.take(600), style = MaterialTheme.typography.bodyMedium)
-                }
-                if (vm.appUpdateProgress >= 0) {
-                    LinearProgressIndicator(
-                        progress = { vm.appUpdateProgress / 100f },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text(Strings.get(R.string.main_screen_downloading, vm.appUpdateProgress), style = MaterialTheme.typography.bodySmall)
-                }
-                vm.appUpdateMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = vm::installAppUpdate, enabled = !vm.appUpdateBusy) { Text(Strings.get(R.string.main_screen_update)) }
-        },
-        dismissButton = {
-            TextButton(onClick = vm::dismissAppUpdate, enabled = !vm.appUpdateBusy) { Text(Strings.get(R.string.main_screen_later)) }
-        },
     )
 }
 
@@ -871,6 +838,9 @@ internal fun DownloadRow(item: DownloadItem, vm: MainViewModel, selecting: Boole
                                     }) { Icon(Icons.Default.Share, contentDescription = Strings.get(R.string.group_ui_share)) }
                                     IconButton(onClick = { openFile(ctx, item) }) {
                                         Icon(Icons.Default.PlayArrow, contentDescription = Strings.get(R.string.group_ui_open))
+                                    }
+                                    if (item.savedUris.size == 1 && QuietRingtones.isAudio(item.mime)) {
+                                        SendToRingtonesButton(item.savedUris[0], item.mime, item.title)
                                     }
                                     if (item.savedUris.size > 1) {
                                         TextButton(onClick = { showFiles = true }) { Text("${item.savedUris.size} files") }

@@ -42,6 +42,17 @@ object Palettes {
         else -> id
     }
     const val DEFAULT = "obsidian"
+
+    /** Las paletas que se usan por defecto con «Seguir el modo del sistema»: una oscura y una clara. */
+    const val DEFAULT_DARK = "obsidian"
+    const val DEFAULT_LIGHT = "paper"
+
+    /**
+     * La paleta que se dibuja. Con [followSystem] activado manda el modo del sistema: [darkId] en oscuro y [lightId] en
+     * claro. «Wallpaper» sigue como siempre (su modo ya lo da el sistema), y sin seguir el sistema vale la elegida.
+     */
+    fun effectiveId(paletteId: String, followSystem: Boolean, systemDark: Boolean, darkId: String, lightId: String): String =
+        if (!followSystem || paletteId == SYSTEM) paletteId else if (systemDark) darkId else lightId
     const val MAX_CUSTOM = 12
 
     private const val TEXT_LIGHT = 0xFFE7EBF1.toInt()

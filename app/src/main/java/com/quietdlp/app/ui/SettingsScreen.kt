@@ -34,6 +34,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -48,6 +50,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import android.app.Activity
+import com.quietdlp.app.data.SettingsBackup
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -104,6 +110,12 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
     val pages = SettingsPage.entries.filter { it != SettingsPage.ADVANCED || vm.advanced }
     var pageName by rememberSaveable { mutableStateOf(SettingsPage.DOWNLOADS.name) }
     val current = pages.firstOrNull { it.name == pageName } ?: SettingsPage.DOWNLOADS
+    var query by rememberSaveable { mutableStateOf("") }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val focus = remember { SettingsFocus() }
+    val searchIndex = remember(vm.advanced) { buildSettingsIndex(vm.advanced) }
+
+    CompositionLocalProvider(LocalSettingsFocus provides focus) {
 
     Scaffold(
         topBar = {
@@ -118,6 +130,15 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
+        SettingsSearchBar(query, onChange = { query = it })
+        if (query.isNotBlank()) {
+            SettingsSearchResults(query, searchIndex, { id ->
+                focusManager.clearFocus()
+                pageName = id.page.name
+                query = ""
+                focus.target = id
+            }, Modifier.weight(1f))
+        } else {
         SettingsChips(
             labels = pages.map { it.label },
             selected = pages.indexOf(current),
@@ -136,7 +157,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             // ───── Descargas ─────
             if (current == SettingsPage.DOWNLOADS) {
             SectionCard(Strings.get(R.string.settings_screen_download)) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.settingAnchor(SettingId.DEFAULT_DOWNLOAD), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(Strings.get(R.string.settings_screen_default_download), style = MaterialTheme.typography.titleSmall)
                     Hint(Strings.get(R.string.settings_screen_for_share_and_copied_links))
                     ModePicker(vm.mode, includeAsk = true) { vm.changeMode(it) }
@@ -144,40 +165,33 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 SwitchRow(
                     Strings.get(R.string.settings_screen_remember_last_choice),
                     if (vm.rememberLast) Strings.get(R.string.settings_screen_links_opened_in_the_app) else Strings.get(R.string.settings_screen_off_starts_from_the_default),
-                    vm.rememberLast, vm::changeRememberLast,
-                )
+                    vm.rememberLast, vm::changeRememberLast, modifier = Modifier.settingAnchor(SettingId.REMEMBER_LAST))
                 SwitchRow(
                     Strings.get(R.string.settings_screen_share_option_with_settings),
                     if (vm.shareOptions) Strings.get(R.string.settings_screen_share_shows_quietdlp_options_too) else Strings.get(R.string.settings_screen_off),
-                    vm.shareOptions, vm::changeShareOptions,
-                )
-                SwitchRow(Strings.get(R.string.settings_screen_offer_copied_links), Strings.get(R.string.settings_screen_when_you_open_the_app), vm.clipboardOffer, vm::changeClipboardOffer)
+                    vm.shareOptions, vm::changeShareOptions, modifier = Modifier.settingAnchor(SettingId.SHARE_OPTIONS))
+                SwitchRow(Strings.get(R.string.settings_screen_offer_copied_links), Strings.get(R.string.settings_screen_when_you_open_the_app), vm.clipboardOffer, vm::changeClipboardOffer, modifier = Modifier.settingAnchor(SettingId.CLIPBOARD))
                 SwitchRow(
                     Strings.get(R.string.settings_screen_photos_and_galleries),
                     if (vm.photosEnabled) Strings.get(R.string.settings_screen_if_there_s_no_video) else Strings.get(R.string.settings_screen_off),
-                    vm.photosEnabled, vm::changePhotosEnabled,
-                )
+                    vm.photosEnabled, vm::changePhotosEnabled, modifier = Modifier.settingAnchor(SettingId.PHOTOS))
                 SwitchRow(
                     Strings.get(R.string.settings_screen_name_music_artist_title),
                     if (vm.musicNames) Strings.get(R.string.settings_screen_also_fills_the_artist_title) else Strings.get(R.string.settings_screen_off_files_keep_the_video),
-                    vm.musicNames, vm::changeMusicNames,
-                )
+                    vm.musicNames, vm::changeMusicNames, modifier = Modifier.settingAnchor(SettingId.MUSIC_NAMES))
                 SwitchRow(
                     Strings.get(R.string.settings_screen_cover_image_in_music),
                     if (vm.coverAudio) Strings.get(R.string.settings_screen_the_thumbnail_goes_inside_the) else Strings.get(R.string.settings_screen_off),
-                    vm.coverAudio, vm::changeCoverAudio,
-                )
+                    vm.coverAudio, vm::changeCoverAudio, modifier = Modifier.settingAnchor(SettingId.COVER_AUDIO))
                 SwitchRow(
                     Strings.get(R.string.settings_screen_cover_image_in_videos),
                     if (vm.coverVideo) Strings.get(R.string.settings_screen_the_thumbnail_goes_inside_the_2) else Strings.get(R.string.settings_screen_off),
-                    vm.coverVideo, vm::changeCoverVideo,
-                )
+                    vm.coverVideo, vm::changeCoverVideo, modifier = Modifier.settingAnchor(SettingId.COVER_VIDEO))
                 SwitchRow(
                     Strings.get(R.string.settings_screen_video_from_photos_and_music),
                     if (vm.autoPhotoVideo) Strings.get(R.string.settings_screen_makes_the_video_by_itself) else Strings.get(R.string.settings_screen_off_use_make_video_on),
-                    vm.autoPhotoVideo, vm::changeAutoPhotoVideo,
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    vm.autoPhotoVideo, vm::changeAutoPhotoVideo, modifier = Modifier.settingAnchor(SettingId.VIDEO_FROM_PHOTOS))
+                Column(Modifier.settingAnchor(SettingId.SONG_LENGTH), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(Strings.get(R.string.settings_screen_song_length_in_videos), style = MaterialTheme.typography.titleSmall)
                     Hint(Strings.get(R.string.settings_screen_how_long_the_song_plays))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -189,9 +203,8 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 SwitchRow(
                     Strings.get(R.string.settings_screen_remember_my_choice),
                     if (vm.rememberSong) Strings.get(R.string.settings_screen_make_video_saves_the_length) else Strings.get(R.string.settings_screen_off_make_video_starts_from),
-                    vm.rememberSong, vm::changeRememberSong,
-                )
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    vm.rememberSong, vm::changeRememberSong, modifier = Modifier.settingAnchor(SettingId.REMEMBER_SONG))
+                Column(Modifier.settingAnchor(SettingId.SAVE_TO), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(Strings.get(R.string.settings_screen_save_to), style = MaterialTheme.typography.titleSmall)
                     Hint(
                         if (vm.folderUri.isEmpty()) Strings.get(R.string.settings_screen_gallery_album_music_in_music, vm.folderName, vm.folderName)
@@ -225,6 +238,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             if (current == SettingsPage.SITES) SitesSection(vm)
 
             // ───── Aspecto ─────
+            if (current == SettingsPage.PERMISSIONS) PermissionsSection()
             if (current == SettingsPage.APPEARANCE) AppearanceSection(vm)
 
             // ───── Actualizaciones ─────
@@ -232,7 +246,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             SectionCard(Strings.get(R.string.settings_screen_updates)) {
                 Text(Strings.get(R.string.settings_screen_quietdlp, AppUpdater.currentVersion(ctx)), style = MaterialTheme.typography.titleSmall)
                 if (AppUpdater.isConfigured(ctx)) {
-                    SwitchRow(Strings.get(R.string.settings_screen_notify_me_of_new_versions), if (vm.appUpdateEnabled) Strings.get(R.string.settings_screen_on) else Strings.get(R.string.settings_screen_off), vm.appUpdateEnabled, vm::changeAppUpdateEnabled)
+                    SwitchRow(Strings.get(R.string.settings_screen_notify_me_of_new_versions), Strings.get(R.string.update_notify_help), vm.appUpdateEnabled, vm::changeAppUpdateEnabled, modifier = Modifier.settingAnchor(SettingId.UPDATE_NOTIFY))
                     OutlinedButton(onClick = { vm.checkAppUpdate(manual = true) }, enabled = !vm.appUpdateBusy) {
                         Text(if (vm.appUpdateBusy) Strings.get(R.string.settings_screen_checking) else Strings.get(R.string.settings_screen_check_now))
                     }
@@ -240,7 +254,19 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     Hint(Strings.get(R.string.settings_screen_available_once_there_s_a))
                 }
                 vm.appUpdateMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
-                SwitchRow(Strings.get(R.string.settings_screen_update_the_download_engine_automatically), if (vm.autoUpdate) Strings.get(R.string.settings_screen_on_at_most_once_a) else Strings.get(R.string.settings_screen_off), vm.autoUpdate, vm::changeAutoUpdate)
+                vm.appUpdate?.let { release ->
+                    Text(Strings.get(R.string.update_card_title, release.version), style = MaterialTheme.typography.titleSmall)
+                    if (release.notes.isNotBlank()) {
+                        Text(Strings.get(R.string.update_notes_title), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        ReleaseNotesText(release.notes)
+                    }
+                    if (vm.appUpdateProgress >= 0) {
+                        LinearProgressIndicator(progress = { vm.appUpdateProgress / 100f }, modifier = Modifier.fillMaxWidth())
+                        Text(Strings.get(R.string.main_screen_downloading, vm.appUpdateProgress), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(onClick = vm::installAppUpdate, enabled = !vm.appUpdateBusy) { Text(Strings.get(R.string.update_banner_install)) }
+                }
+                SwitchRow(Strings.get(R.string.settings_screen_update_the_download_engine_automatically), if (vm.autoUpdate) Strings.get(R.string.settings_screen_on_at_most_once_a) else Strings.get(R.string.settings_screen_off), vm.autoUpdate, vm::changeAutoUpdate, modifier = Modifier.settingAnchor(SettingId.UPDATE_ENGINE))
                 if (vm.advanced) {
                     Hint(Strings.get(R.string.engine_version, vm.ytdlpVersion ?: Strings.get(R.string.unknown)))
                     OutlinedButton(onClick = vm::updateEngine, enabled = !vm.updating && vm.engineReady) {
@@ -255,7 +281,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             // ───── Solo en modo avanzado ─────
             if (current == SettingsPage.ADVANCED) {
                 var siteAddress by remember { mutableStateOf("") }
-                SectionCard(Strings.get(R.string.settings_screen_sessions)) {
+                SectionCard(Strings.get(R.string.settings_screen_sessions), Modifier.settingAnchor(SettingId.SESSIONS)) {
                     Hint(Strings.get(R.string.settings_screen_for_content_that_requires_signing))
                     OutlinedTextField(
                         value = siteAddress,
@@ -296,7 +322,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 }
 
                 var errorLog by remember { mutableStateOf(ErrorLog.read(ctx)) }
-                SectionCard(Strings.get(R.string.settings_screen_error_log)) {
+                SectionCard(Strings.get(R.string.settings_screen_error_log), Modifier.settingAnchor(SettingId.ERROR_LOG)) {
                     val n = ErrorLogText.count(errorLog)
                     Hint(if (n == 0) Strings.get(R.string.settings_screen_no_errors) else if (n == 1) Strings.get(R.string.errors_recent_one) else Strings.get(R.string.errors_recent_many, n))
                     if (n > 0) {
@@ -339,7 +365,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(Strings.get(R.string.settings_screen_buy_me_a_kebab_5)) }
-                    SwitchRow(Strings.get(R.string.settings_screen_show_the_support_card), Strings.get(R.string.settings_screen_on_the_main_screen_below), vm.supportCard, vm::changeSupportCard)
+                    SwitchRow(Strings.get(R.string.settings_screen_show_the_support_card), Strings.get(R.string.settings_screen_on_the_main_screen_below), vm.supportCard, vm::changeSupportCard, modifier = Modifier.settingAnchor(SettingId.SUPPORT_CARD))
                 }
                 Hint(Strings.get(R.string.settings_screen_free_software_gpl_3_0))
             }
@@ -348,6 +374,8 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
         }
         }
         }
+        }
+    }
     }
 }
 
@@ -355,12 +383,13 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
  * Las pestañas de Ajustes, en el orden común de las apps Quiet: primero las propias (Descargas la primera) y luego
  * Apariencia, Actualizaciones y Acerca de (Idioma, Funciones y Comentarios se añaden en sus pasos).
  */
-private enum class SettingsPage(val label: Int) {
+internal enum class SettingsPage(val label: Int) {
     DOWNLOADS(R.string.settings_downloads),
     QUEUE(R.string.settings_queue),
     SITES(R.string.settings_sites),
     BACKUP(R.string.settings_backup),
     ADVANCED(R.string.settings_advanced),
+    PERMISSIONS(R.string.settings_permissions),
     APPEARANCE(R.string.settings_appearance),
     LANGUAGE(R.string.settings_language),
     UPDATES(R.string.settings_updates),
@@ -378,14 +407,14 @@ private fun QueueSection(vm: MainViewModel) {
     // Al volver del ajuste de Android, comprobar de nuevo cómo quedó.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { restricted = vm.batteryRestricted() }
     SectionCard(Strings.get(R.string.settings_screen_queue)) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.settingAnchor(SettingId.PARALLEL), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(Strings.get(R.string.settings_screen_downloads_at_once), style = MaterialTheme.typography.titleSmall)
             Hint(Strings.get(R.string.settings_screen_if_a_site_starts_refusing))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..Prefs.MAX_PARALLEL).forEach { n -> QuietChip(vm.maxParallel == n, { vm.changeMaxParallel(n) }, "$n") }
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.settingAnchor(SettingId.NETWORK), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(Strings.get(R.string.settings_screen_network), style = MaterialTheme.typography.titleSmall)
             Hint(
                 if (vm.wifiOnly) Strings.get(R.string.settings_screen_downloads_wait_until_you_have)
@@ -396,7 +425,7 @@ private fun QueueSection(vm: MainViewModel) {
                 QuietChip(!vm.wifiOnly, { vm.changeWifiOnly(false) }, Strings.get(R.string.settings_screen_wi_fi_and_data))
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.settingAnchor(SettingId.FOLLOW), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(Strings.get(R.string.settings_screen_followed_pages), style = MaterialTheme.typography.titleSmall)
             Hint(
                 if (vm.followWifiOnly) Strings.get(R.string.settings_screen_checks_and_downloads_only_on)
@@ -408,7 +437,7 @@ private fun QueueSection(vm: MainViewModel) {
             }
         }
         SiteKeySection(vm)
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.settingAnchor(SettingId.MULTI), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(Strings.get(R.string.settings_screen_links_with_several_files), style = MaterialTheme.typography.titleSmall)
             Hint(if (vm.askMulti) Strings.get(R.string.settings_screen_asks_which_ones_to_download) else Strings.get(R.string.settings_screen_downloads_all_of_them_without))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -416,14 +445,18 @@ private fun QueueSection(vm: MainViewModel) {
                 QuietChip(!vm.askMulti, { vm.changeAskMulti(false) }, Strings.get(R.string.settings_screen_download_all))
             }
         }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.settingAnchor(SettingId.BATTERY), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(Strings.get(R.string.settings_screen_battery), style = MaterialTheme.typography.titleSmall)
             Hint(
                 if (restricted) Strings.get(R.string.settings_screen_android_may_pause_downloads_when)
                 else Strings.get(R.string.settings_screen_no_limits_downloads_keep_going),
             )
-            OutlinedButton(onClick = { openBatterySetting(ctx, listOnly = !restricted) }) {
-                Text(if (restricted) Strings.get(R.string.settings_screen_allow_without_limits) else Strings.get(R.string.settings_screen_battery_settings))
+            if (restricted && Build.MANUFACTURER.equals("samsung", ignoreCase = true)) Hint(Strings.get(R.string.battery_samsung_hint))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { openBatterySetting(ctx, listOnly = !restricted) }) {
+                    Text(if (restricted) Strings.get(R.string.settings_screen_allow_without_limits) else Strings.get(R.string.settings_screen_battery_settings))
+                }
+                if (restricted) TextButton(onClick = { openAppInfo(ctx) }) { Text(Strings.get(R.string.battery_app_info)) }
             }
         }
     }
@@ -434,7 +467,7 @@ private fun QueueSection(vm: MainViewModel) {
 private fun SitesSection(vm: MainViewModel) {
     var editing by remember { mutableStateOf<SiteRule?>(null) }
     var adding by rememberSaveable { mutableStateOf(false) }
-    SectionCard(Strings.get(R.string.settings_screen_sites)) {
+    SectionCard(Strings.get(R.string.settings_screen_sites), Modifier.settingAnchor(SettingId.SITES)) {
         Hint(Strings.get(R.string.settings_screen_pick_a_website_and_always))
         vm.siteRules.forEach { rule ->
             Row(
@@ -533,7 +566,7 @@ private fun ModePicker(selected: DownloadMode?, includeAsk: Boolean, onPick: (Do
 @Composable
 private fun SiteKeySection(vm: MainViewModel) {
     var dialog by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.settingAnchor(SettingId.SITE_KEYS), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(Strings.get(R.string.settings_screen_site_keys), style = MaterialTheme.typography.titleSmall)
         Hint(if (vm.keySet) Strings.get(R.string.settings_screen_key_saved) else Strings.get(R.string.settings_screen_no_key))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -563,7 +596,7 @@ private fun SiteKeySection(vm: MainViewModel) {
 }
 
 @Composable
-private fun Hint(text: String) = Text(
+internal fun Hint(text: String) = Text(
     text,
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -579,7 +612,7 @@ private fun OfficialSource() {
         cm.setPrimaryClip(ClipData.newPlainText(label, text))
         Toast.makeText(ctx, Strings.get(R.string.settings_screen_copied), Toast.LENGTH_SHORT).show()
     }
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(Modifier.settingAnchor(SettingId.OFFICIAL_SOURCE), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(Strings.get(R.string.settings_screen_official_source), style = MaterialTheme.typography.titleSmall)
         Hint(Strings.get(R.string.settings_screen_quietdlp_is_only_on_github))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -607,7 +640,7 @@ private fun OfficialSource() {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NameSection(vm: MainViewModel) {
-    SectionCard(Strings.get(R.string.settings_screen_file_names)) {
+    SectionCard(Strings.get(R.string.settings_screen_file_names), Modifier.settingAnchor(SettingId.FILE_NAMES)) {
         Hint(Strings.get(R.string.settings_screen_how_downloaded_files_are_named))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FileNameTemplate.PRESETS.forEach { (label, template) ->
@@ -629,21 +662,74 @@ private fun NameSection(vm: MainViewModel) {
 /** Guardar los ajustes en un archivo y ponerlos de vuelta (por ejemplo en otro móvil). */
 @Composable
 private fun BackupSection(vm: MainViewModel) {
+    val ctx = LocalContext.current
+    var withData by rememberSaveable { mutableStateOf(false) }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) vm.saveSettingsTo(uri)
+        if (uri != null) vm.saveSettingsTo(uri, withData)
     }
     val restore = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) vm.restoreSettingsFrom(uri)
+        if (uri != null) vm.previewProfile(uri)
     }
-    SectionCard(Strings.get(R.string.settings_screen_backup)) {
-        Hint(Strings.get(R.string.settings_screen_your_history_stays_when_you))
-        Hint(Strings.get(R.string.settings_screen_settings_and_history_sessions_the))
+    // Tras importar, la app se abre de nuevo para leer todo (idioma, tema y ajustes) desde cero.
+    LaunchedEffect(vm.profileApplied) {
+        if (vm.profileApplied) {
+            Toast.makeText(ctx, Strings.get(R.string.profile_imported), Toast.LENGTH_LONG).show()
+            (ctx as? Activity)?.let { a ->
+                a.finish()
+                a.startActivity(Intent(a, com.quietdlp.app.MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            }
+        }
+    }
+    SectionCard(Strings.get(R.string.profile_title), Modifier.settingAnchor(SettingId.BACKUP)) {
+        Hint(Strings.get(R.string.profile_help))
+        Hint(Strings.get(R.string.profile_not_included))
+        SwitchRow(Strings.get(R.string.profile_with_data), Strings.get(R.string.profile_with_data_help), withData, { withData = it })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { save.launch("quietdlp-backup.json") }) { Text(Strings.get(R.string.settings_screen_save_backup)) }
-            OutlinedButton(onClick = { restore.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text(Strings.get(R.string.settings_screen_restore_backup)) }
+            OutlinedButton(onClick = { save.launch("quietdlp-profile.json") }) { Text(Strings.get(R.string.profile_export)) }
+            OutlinedButton(onClick = { restore.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text(Strings.get(R.string.profile_import)) }
         }
         vm.backupMessage?.let { Hint(it) }
     }
+    vm.profilePreview?.let { preview ->
+        var include by remember { mutableStateOf(true) }
+        val hasData = preview.history > 0 || preview.follows > 0
+        AlertDialog(
+            onDismissRequest = vm::cancelProfile,
+            title = { Text(Strings.get(R.string.profile_import_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (preview.changes.isEmpty()) {
+                        Text(Strings.get(R.string.profile_no_changes))
+                    } else {
+                        Text(Strings.get(R.string.profile_will_change))
+                        preview.changes.forEach { (group, n) ->
+                            Text("• " + Strings.get(profileGroupLabel(group)) + ": " + n, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (hasData) {
+                        SwitchRow(
+                            Strings.get(R.string.profile_with_data),
+                            Strings.get(R.string.profile_data_found, preview.history, preview.follows),
+                            include, { include = it },
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { vm.confirmProfile(include && hasData) }) { Text(Strings.get(R.string.profile_import)) } },
+            dismissButton = { TextButton(onClick = vm::cancelProfile) { Text(Strings.get(R.string.settings_screen_cancel)) } },
+        )
+    }
+}
+
+private fun profileGroupLabel(g: SettingsBackup.Group): Int = when (g) {
+    SettingsBackup.Group.DOWNLOADS -> R.string.settings_downloads
+    SettingsBackup.Group.QUEUE -> R.string.settings_queue
+    SettingsBackup.Group.SITES -> R.string.settings_sites
+    SettingsBackup.Group.ADVANCED -> R.string.settings_advanced
+    SettingsBackup.Group.APPEARANCE -> R.string.settings_appearance
+    SettingsBackup.Group.LANGUAGE -> R.string.settings_language
+    SettingsBackup.Group.UPDATES -> R.string.settings_updates
+    SettingsBackup.Group.ABOUT -> R.string.settings_about
 }
 
 /** "primary:Download/Videos" → "Download/Videos". */
@@ -658,13 +744,33 @@ private fun folderLabel(uri: String): String = runCatching {
 private fun AppearanceSection(vm: MainViewModel) {
     var editing by remember { mutableStateOf<PaletteSpec?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
-    SectionCard(Strings.get(R.string.settings_screen_appearance)) {
+    SectionCard(Strings.get(R.string.settings_screen_appearance), Modifier.settingAnchor(SettingId.APPEARANCE)) {
         Text(Strings.get(R.string.settings_screen_screen_orientation), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppOrientation.entries.forEach { o -> QuietChip(vm.orientation == o, { vm.changeOrientation(o) }, Strings.tr(o.label)) }
         }
         Hint(Strings.get(R.string.settings_screen_auto_follows_your_phone_s))
-        val groups = listOf(PaletteGroup.DARK, PaletteGroup.COLORFUL, PaletteGroup.LIGHT)
+        SwitchRow(
+            Strings.get(R.string.follow_system_mode),
+            Strings.get(R.string.follow_system_mode_help),
+            vm.followSystemMode, vm::changeFollowSystemMode,
+            modifier = Modifier.settingAnchor(SettingId.FOLLOW_SYSTEM),
+        )
+        if (vm.followSystemMode) {
+            val all = Palettes.presets + vm.customPalettes
+            listOf(
+                Triple(R.string.follow_system_dark, true, vm.paletteDark to vm::choosePaletteDark),
+                Triple(R.string.follow_system_light, false, vm.paletteLight to vm::choosePaletteLight),
+            ).forEach { (label, dark, picked) ->
+                Text(Strings.get(label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    all.filter { it.dark == dark }.forEach { p ->
+                        PaletteSwatch(p, picked.first == p.id && vm.paletteId != Palettes.SYSTEM) { picked.second(p.id) }
+                    }
+                }
+            }
+        }
+        val groups = if (vm.followSystemMode) emptyList() else listOf(PaletteGroup.DARK, PaletteGroup.COLORFUL, PaletteGroup.LIGHT)
         groups.forEach { g ->
             Text(Strings.tr(g.label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -686,7 +792,12 @@ private fun AppearanceSection(vm: MainViewModel) {
         Text(Strings.tr(PaletteGroup.CUSTOM.label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             vm.customPalettes.forEach { p ->
-                PaletteSwatch(p, vm.paletteId == p.id) { vm.choosePalette(p.id) }
+                val picked = if (vm.followSystemMode && vm.paletteId != Palettes.SYSTEM) {
+                    (if (p.dark) vm.paletteDark else vm.paletteLight) == p.id
+                } else vm.paletteId == p.id
+                PaletteSwatch(p, picked) {
+                    if (vm.followSystemMode) { if (p.dark) vm.choosePaletteDark(p.id) else vm.choosePaletteLight(p.id) } else vm.choosePalette(p.id)
+                }
             }
             if (vm.customPalettes.size < Palettes.MAX_CUSTOM) {
                 Box(

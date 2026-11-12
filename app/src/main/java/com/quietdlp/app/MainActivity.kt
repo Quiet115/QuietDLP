@@ -26,6 +26,9 @@ class MainActivity : ComponentActivity() {
 
         /** Una descarga falló porque la web pide iniciar sesión: dominio donde hacerlo + datos para reintentar. */
         const val EXTRA_LOGIN_HOST = "extra_login_host"
+
+        /** Solo en builds de depuración: `am start ... --ez force_update true` finge que hay una versión nueva. */
+        const val EXTRA_FORCE_UPDATE = "force_update"
         const val EXTRA_RETRY_URL = "extra_retry_url"
         const val EXTRA_RETRY_ID = "extra_retry_id"
         const val EXTRA_KIND = "extra_kind"
@@ -46,7 +49,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         DownloadRepository.init(this)
         setContent {
-            QuietTheme(vm.paletteId, vm.customPalettes) {
+            QuietTheme(vm.paletteId, vm.customPalettes, vm.followSystemMode, vm.paletteDark, vm.paletteLight) {
                 LaunchedEffect(vm.orientation) {
                     requestedOrientation = when (vm.orientation) {
                         AppOrientation.AUTO -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -74,6 +77,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent?) {
         intent ?: return
+        if (intent.getBooleanExtra(EXTRA_FORCE_UPDATE, false)) vm.debugForceUpdate()
 
         // Venimos del aviso "pide iniciar sesión": mostrar la explicación.
         val loginHost = intent.getStringExtra(EXTRA_LOGIN_HOST)

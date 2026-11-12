@@ -31,8 +31,55 @@ object SettingsBackup {
         "palette" to 's', "custom_palettes" to 's', "advanced" to 'b', "folder_name" to 's', "orientation" to 's',
         "support_card" to 'b', "max_parallel" to 'i', "wifi_only" to 'b', "ask_multi" to 'b', "battery_hint_off" to 'b',
         "subs_on" to 'b', "sub_langs" to 's', "sub_mode" to 's', "cover_audio" to 'b', "cover_video" to 'b', "music_names" to 'b', "name_template" to 's', "sponsor_mode" to 's', "sponsor_cats" to 's', "chapter_mode" to 's',
-        "site_rules" to 's', "follow_wifi" to 'b', "share_options" to 'b',
+        "follow_system_mode" to 'b', "palette_dark" to 's', "palette_light" to 's', "language" to 's', "site_rules" to 's', "follow_wifi" to 'b', "share_options" to 'b',
     )
+
+    /** En qué pestaña de Ajustes vive cada ajuste: sirve para decir qué cambia un perfil antes de importarlo. */
+    enum class Group { DOWNLOADS, QUEUE, SITES, ADVANCED, APPEARANCE, LANGUAGE, UPDATES, ABOUT }
+
+    fun groupOf(key: String): Group = when (key) {
+        "max_parallel", "wifi_only", "ask_multi", "battery_hint_off", "follow_wifi" -> Group.QUEUE
+        "site_rules" -> Group.SITES
+        "advanced", "name_template", "sponsor_mode", "sponsor_cats", "chapter_mode" -> Group.ADVANCED
+        "palette", "custom_palettes", "orientation", "follow_system_mode", "palette_dark", "palette_light" -> Group.APPEARANCE
+        "language" -> Group.LANGUAGE
+        "app_update_check", "auto_update" -> Group.UPDATES
+        "support_card" -> Group.ABOUT
+        else -> Group.DOWNLOADS
+    }
+
+    /** Lo que se ve al revisar un archivo antes de importarlo. */
+    sealed interface Check {
+        /** No es un perfil de QuietDLP (o está dañado). */
+        data object NotAProfile : Check
+
+        /** Lo hizo una versión más nueva de QuietDLP que esta. */
+        data object FromNewerVersion : Check
+
+        /** [values] son los ajustes que sirven; [history] y [follows] cuántos elementos trae de cada uno. */
+        data class Ready(val values: Map<String, Any>, val history: Int, val follows: Int) : Check
+    }
+
+    fun check(json: String): Check {
+        val root = runCatching { JSONObject(json) }.getOrNull() ?: return Check.NotAProfile
+        if (root.optString("app") != APP) return Check.NotAProfile
+        val format = root.optInt("format", 0)
+        if (format > FORMAT) return Check.FromNewerVersion
+        if (format < 1) return Check.NotAProfile
+        val values = decode(json) ?: return Check.NotAProfile
+        return Check.Ready(values, decodeHistory(json).size, decodeFollows(json).size)
+    }
+
+    /** Qué ajustes del perfil son distintos de los de ahora, agrupados por pestaña. Los que ya coinciden no cuentan. */
+    fun changes(values: Map<String, Any>, current: Map<String, *>): Map<Group, Int> {
+        val out = LinkedHashMap<Group, Int>()
+        for ((key, v) in values) {
+            if (current[key] == v) continue
+            val g = groupOf(key)
+            out[g] = (out[g] ?: 0) + 1
+        }
+        return out
+    }
 
     private fun matches(type: Char, v: Any?): Boolean = when (type) {
         'b' -> v is Boolean

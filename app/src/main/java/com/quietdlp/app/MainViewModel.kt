@@ -1,5 +1,6 @@
 package com.quietdlp.app
 
+import android.os.SystemClock
 import android.app.Application
 import android.content.ClipboardManager
 import android.content.ComponentName
@@ -45,6 +46,7 @@ import com.quietdlp.app.download.DownloadIndex
 import com.quietdlp.app.download.MediaFiles
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -129,6 +131,9 @@ data class LoginPrompt(
 
 /** Desde cuántos archivos se considera una cola larga (y se sugiere quitar la restricción de batería). */
 private const val LONG_QUEUE = 5
+
+/** El aviso de versión nueva sale una sola vez por arranque en frío (el proceso). */
+private var bannerShownThisProcess = false
 
 class MainViewModel(private val app: Application) : AndroidViewModel(app) {
 
@@ -347,18 +352,47 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         prefs.paletteId = id
     }
 
+    var followSystemMode by mutableStateOf(prefs.followSystemMode)
+        private set
+    var paletteDark by mutableStateOf(prefs.paletteDark)
+        private set
+    var paletteLight by mutableStateOf(prefs.paletteLight)
+        private set
+
+    fun changeFollowSystemMode(v: Boolean) {
+        followSystemMode = v
+        prefs.followSystemMode = v
+        // Si estaba elegida «Wallpaper», se pasa a una paleta normal para que el modo del sistema mande.
+        if (v && paletteId == Palettes.SYSTEM) choosePalette(Palettes.DEFAULT)
+    }
+
+    fun choosePaletteDark(id: String) {
+        paletteDark = id
+        prefs.paletteDark = id
+        if (paletteId == Palettes.SYSTEM) choosePalette(Palettes.DEFAULT)
+    }
+
+    fun choosePaletteLight(id: String) {
+        paletteLight = id
+        prefs.paletteLight = id
+        if (paletteId == Palettes.SYSTEM) choosePalette(Palettes.DEFAULT)
+    }
+
     /** Guarda una paleta propia (nueva o editada) y la deja elegida. */
     fun saveCustomPalette(spec: PaletteSpec) {
         val list = customPalettes.filterNot { it.id == spec.id } + spec
         customPalettes = list.takeLast(Palettes.MAX_CUSTOM)
         prefs.customPalettes = Palettes.encodeCustom(customPalettes)
         choosePalette(spec.id)
+        if (followSystemMode) { if (spec.dark) choosePaletteDark(spec.id) else choosePaletteLight(spec.id) }
     }
 
     fun deleteCustomPalette(id: String) {
         customPalettes = customPalettes.filterNot { it.id == id }
         prefs.customPalettes = Palettes.encodeCustom(customPalettes)
         if (paletteId == id) choosePalette(Palettes.DEFAULT)
+        if (paletteDark == id) choosePaletteDark(Palettes.DEFAULT_DARK)
+        if (paletteLight == id) choosePaletteLight(Palettes.DEFAULT_LIGHT)
     }
 
     // ── Reglas por sitio ──
@@ -534,8 +568,10 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         private set
     var appUpdate by mutableStateOf<AppUpdater.Release?>(null)
         private set
-    var showAppUpdate by mutableStateOf(false)
+    /** Hora (reloj del sistema) en que salió el aviso de versión nueva; 0 si no está a la vista. */
+    var updateBannerStartedAt by mutableLongStateOf(0L)
         private set
+    val showUpdateBanner: Boolean get() = updateBannerStartedAt != 0L
     /** Buscando o descargando. */
     var appUpdateBusy by mutableStateOf(false)
         private set
@@ -548,12 +584,29 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     fun changeAppUpdateEnabled(v: Boolean) {
         appUpdateEnabled = v
         prefs.appUpdateCheck = v
+        if (!v) closeUpdateBanner()
     }
 
-    /** "Más tarde": no se vuelve a ofrecer sola esta misma versión. */
-    fun dismissAppUpdate() {
-        appUpdate?.let { prefs.dismissedAppVersion = it.version }
-        showAppUpdate = false
+    /** Cierra el aviso. Hasta el próximo arranque no vuelve a salir. */
+    fun closeUpdateBanner() {
+        updateBannerStartedAt = 0L
+    }
+
+    /** Solo para pruebas en builds de depuración: finge que hay una versión nueva. */
+    fun debugForceUpdate() {
+        if (!AppUpdater.isDebuggable(app)) return
+        appUpdate = AppUpdater.Release(
+            version = "9.9.9",
+            notes = "## What's new\n\n**Feedback** tab opens a ready-made issue.\n\n- Settings in tabs\n  - Downloads first\n- Language: *English* and `es`\n\nFull Changelog: https://github.com/Quiet115/QuietDLP/releases",
+            apkUrl = "", sha256 = null, sizeBytes = 0L,
+        )
+        showBannerOnce()
+    }
+
+    private fun showBannerOnce() {
+        if (bannerShownThisProcess) return
+        bannerShownThisProcess = true
+        updateBannerStartedAt = SystemClock.elapsedRealtime()
     }
 
     fun checkAppUpdate(manual: Boolean) {
@@ -575,7 +628,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                         if (manual) appUpdateMessage = Strings.get(R.string.main_view_model_you_re_up_to_date, current)
                     else -> {
                         appUpdate = r
-                        if (manual || prefs.dismissedAppVersion != r.version) showAppUpdate = true
+                        if (!manual) showBannerOnce()
                     }
                 }
             } catch (t: Throwable) {
@@ -606,7 +659,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     file.delete()
                     appUpdateMessage = problem
                 } else {
-                    showAppUpdate = false
+                    closeUpdateBanner()
                     app.startActivity(AppUpdater.installIntent(app, file))
                 }
             } catch (t: Throwable) {
@@ -616,6 +669,15 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                 appUpdateProgress = -1
             }
         }
+    }
+
+    // ── Pantalla de bienvenida de permisos (solo la primera vez) ──
+    var permissionsWelcomeSeen by mutableStateOf(prefs.permissionsWelcomeSeen)
+        private set
+
+    fun finishPermissionsWelcome() {
+        prefs.permissionsWelcomeSeen = true
+        permissionsWelcomeSeen = true
     }
 
     // ── Segunda entrada de "Compartir" ──
@@ -844,9 +906,8 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                 engineReady = true
                 Engine.autoUpdateIfStale(app, prefs)
                 ytdlpVersion = Engine.version(app)
-                // Buscar una versión nueva de la app: como máximo una vez al día (en depuración, siempre).
-                val stale = System.currentTimeMillis() - prefs.lastAppCheckMs > 24L * 60 * 60 * 1000
-                if (prefs.appUpdateCheck && (stale || AppUpdater.isDebuggable(app))) checkAppUpdate(manual = false)
+                // Buscar una versión nueva de la app en cada arranque en frío.
+                if (prefs.appUpdateCheck) checkAppUpdate(manual = false)
             } catch (t: Throwable) {
                 engineError = t.message ?: t.toString()
             }
@@ -1463,16 +1524,32 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     var backupMessage by mutableStateOf<String?>(null)
         private set
 
-    fun saveSettingsTo(uri: Uri) {
+    /** Exporta el perfil de ajustes. Con [withData] lleva también el historial y las páginas seguidas. */
+    fun saveSettingsTo(uri: Uri, withData: Boolean) {
         viewModelScope.launch {
             backupMessage = withContext(Dispatchers.IO) {
                 runCatching {
-                    app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(prefs.exportSettings(DownloadRepository.items.value, FollowStore.pages.value).toByteArray()) }
+                    val json = if (withData) prefs.exportSettings(DownloadRepository.items.value, FollowStore.pages.value) else prefs.exportSettings()
+                    app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                         ?: error(Strings.get(R.string.main_view_model_couldn_t_write_the_file))
-                    Strings.get(R.string.main_view_model_backup_saved)
+                    Strings.get(R.string.profile_exported)
                 }.getOrElse { Strings.get(R.string.main_view_model_couldn_t_save, it.message) }
             }
         }
+    }
+
+    /** Un perfil leído y revisado, a la espera de que el usuario confirme. */
+    class ProfilePreview(val json: String, val changes: Map<SettingsBackup.Group, Int>, val history: Int, val follows: Int)
+
+    var profilePreview by mutableStateOf<ProfilePreview?>(null)
+        private set
+
+    /** Se importó un perfil: la pantalla reinicia la app para que todo se lea de nuevo. */
+    var profileApplied by mutableStateOf(false)
+        private set
+
+    fun cancelProfile() {
+        profilePreview = null
     }
 
     /** Lee todo el archivo, o devuelve null si pasa de [max] bytes (sin cargar un archivo enorme en memoria). */
@@ -1502,26 +1579,42 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         return added
     }
 
-    fun restoreSettingsFrom(uri: Uri) {
+    /** Lee y revisa el archivo; no cambia nada hasta que el usuario confirma ([confirmProfile]). */
+    fun previewProfile(uri: Uri) {
         viewModelScope.launch {
             backupMessage = withContext(Dispatchers.IO) {
                 runCatching {
                     val bytes = app.contentResolver.openInputStream(uri)?.use { readAtMost(it, SettingsBackup.MAX_BYTES) }
-                        ?: error(Strings.get(R.string.main_view_model_couldn_t_read_the_file))
-                    if (bytes == null) return@runCatching Strings.get(R.string.main_view_model_that_file_is_too_big)
+                        ?: return@runCatching Strings.get(R.string.main_view_model_that_file_is_too_big)
                     val text = String(bytes)
-                    val n = prefs.importSettings(text)
-                    if (n < 0) return@runCatching Strings.get(R.string.main_view_model_that_isn_t_a_quietdlp)
-                    val rows = DownloadRepository.mergeHistory(app, SettingsBackup.decodeHistory(text))
-                    val pages = restoreFollows(SettingsBackup.decodeFollows(text))
-                    buildString {
-                        append(Strings.get(R.string.main_view_model_restored_settings, n))
-                        if (rows > 0) append(" " + if (rows == 1) Strings.get(R.string.restore_history_one) else Strings.get(R.string.restore_history_many, rows))
-                        if (pages > 0) append(" " + if (pages == 1) Strings.get(R.string.restore_pages_one) else Strings.get(R.string.restore_pages_many, pages))
-                        append(Strings.get(R.string.main_view_model_close_the_app_and_open))
+                    when (val check = SettingsBackup.check(text)) {
+                        SettingsBackup.Check.NotAProfile -> Strings.get(R.string.profile_not_valid)
+                        SettingsBackup.Check.FromNewerVersion -> Strings.get(R.string.profile_newer)
+                        is SettingsBackup.Check.Ready -> {
+                            profilePreview = ProfilePreview(text, SettingsBackup.changes(check.values, prefs.currentSettings()), check.history, check.follows)
+                            null
+                        }
                     }
                 }.getOrElse { Strings.get(R.string.main_view_model_couldn_t_restore, it.message) }
             }
+        }
+    }
+
+    /** Aplica el perfil revisado. Con [withData] trae también el historial y las páginas seguidas que tenga. */
+    fun confirmProfile(withData: Boolean) {
+        val preview = profilePreview ?: return
+        profilePreview = null
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    prefs.importSettings(preview.json)
+                    if (withData) {
+                        DownloadRepository.mergeHistory(app, SettingsBackup.decodeHistory(preview.json))
+                        restoreFollows(SettingsBackup.decodeFollows(preview.json))
+                    }
+                }
+            }
+            profileApplied = true
         }
     }
 

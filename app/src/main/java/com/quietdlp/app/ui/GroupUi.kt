@@ -278,6 +278,7 @@ fun FilesDialog(item: DownloadItem, vm: MainViewModel, onDismiss: () -> Unit) {
                                 IconButton(onClick = { openFile(ctx, file) }) { Icon(Icons.Default.PlayArrow, contentDescription = Strings.get(R.string.group_ui_open)) }
                             }
                             if (ConvertTargets.canConvert(mime)) TextButton(onClick = { convert = file }) { Text(Strings.get(R.string.group_ui_convert)) }
+                            if (QuietRingtones.isAudio(mime)) SendToRingtonesButton(uri, mime, remember(uri) { displayName(ctx, uri) })
                         }
                     }
                 }
@@ -369,10 +370,22 @@ fun DataPromptDialog(vm: MainViewModel) {
 
 /** Abre el ajuste de Android para dejar a QuietDLP sin restricciones de batería (si no se puede ir directo, la lista). */
 fun openBatterySetting(ctx: Context, listOnly: Boolean = false) {
+    val me = Uri.parse("package:${ctx.packageName}")
+    val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(me)
     val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-    val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(Uri.parse("package:${ctx.packageName}"))
-    val ok = !listOnly && runCatching { ctx.startActivity(direct) }.isSuccess
-    if (!ok && runCatching { ctx.startActivity(list) }.isFailure) {
+    val appInfo = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(me)
+    // La solicitud directa pone a QuietDLP en la excepción con un solo toque. Si el teléfono no la abre, la lista de
+    // Android y, al final, la ficha de la app (de ahí se llega a Batería).
+    val tries = if (listOnly) listOf(list, appInfo) else listOf(direct, list, appInfo)
+    if (tries.none { runCatching { ctx.startActivity(it) }.isSuccess }) {
+        Toast.makeText(ctx, Strings.get(R.string.group_ui_couldn_t_open_the_battery), Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** Abre la ficha de QuietDLP en los ajustes de Android (ahí está Batería, sea cual sea el teléfono). */
+fun openAppInfo(ctx: Context) {
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.parse("package:${ctx.packageName}"))
+    if (runCatching { ctx.startActivity(intent) }.isFailure) {
         Toast.makeText(ctx, Strings.get(R.string.group_ui_couldn_t_open_the_battery), Toast.LENGTH_SHORT).show()
     }
 }

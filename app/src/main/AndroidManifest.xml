@@ -17,6 +17,11 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Para saber si QuietRingtones está instalada y poder enviarle un audio. -->
+    <queries>
+        <package android:name="com.quietringtones" />
+    </queries>
+
     <application
         android:name=".QuietApp"
         android:allowBackup="false"

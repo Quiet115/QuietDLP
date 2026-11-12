@@ -1,10 +1,13 @@
 package com.quietdlp.app.data
 
 import android.content.Context
+import com.quietdlp.app.ui.Language
+import com.quietdlp.app.ui.LanguageStore
 import com.quietdlp.app.ui.Palettes
 
 /** Ajustes sencillos guardados en SharedPreferences. */
 class Prefs(context: Context) {
+    private val appContext = context.applicationContext
     private val sp = context.applicationContext
         .getSharedPreferences("quietdlp", Context.MODE_PRIVATE)
 
@@ -55,11 +58,6 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_app_check_ms", 0L)
         set(v) = sp.edit().putLong("last_app_check_ms", v).apply()
 
-    /** Última versión que el usuario dijo "más tarde": no se vuelve a ofrecer sola. */
-    var dismissedAppVersion: String
-        get() = sp.getString("dismissed_app_version", "") ?: ""
-        set(v) = sp.edit().putString("dismissed_app_version", v).apply()
-
     /** Si el enlace no tiene vídeo, intentar descargar sus fotos (gallery-dl). Activado por defecto. */
     var photosEnabled: Boolean
         get() = sp.getBoolean("photos_enabled", true)
@@ -69,6 +67,11 @@ class Prefs(context: Context) {
     var autoUpdate: Boolean
         get() = sp.getBoolean("auto_update", true)
         set(v) = sp.edit().putBoolean("auto_update", v).apply()
+
+    /** Si ya se mostró la pantalla de bienvenida de permisos. Es de este móvil: no viaja en la copia. */
+    var permissionsWelcomeSeen: Boolean
+        get() = sp.getBoolean("perm_welcome_seen", false)
+        set(v) = sp.edit().putBoolean("perm_welcome_seen", v).apply()
 
     /** Si ya se mostró el aviso inicial sobre la actualización automática. */
     var updateNoticeSeen: Boolean
@@ -129,6 +132,19 @@ class Prefs(context: Context) {
     var paletteId: String
         get() = Palettes.normalizeId(sp.getString("palette", "obsidian"))
         set(v) = sp.edit().putString("palette", v).apply()
+
+    /** Seguir el modo claro u oscuro del sistema: usa [paletteDark] en oscuro y [paletteLight] en claro. */
+    var followSystemMode: Boolean
+        get() = sp.getBoolean("follow_system_mode", false)
+        set(v) = sp.edit().putBoolean("follow_system_mode", v).apply()
+
+    var paletteDark: String
+        get() = sp.getString("palette_dark", "obsidian") ?: "obsidian"
+        set(v) = sp.edit().putString("palette_dark", v).apply()
+
+    var paletteLight: String
+        get() = sp.getString("palette_light", "paper") ?: "paper"
+        set(v) = sp.edit().putString("palette_light", v).apply()
 
     /** Paletas creadas por el usuario, en JSON (ver Palettes.encodeCustom). */
     var customPalettes: String
@@ -233,13 +249,20 @@ class Prefs(context: Context) {
 
     /** Los ajustes (y el historial, si se da) en un texto JSON, para guardarlos en un archivo (ver [SettingsBackup]). */
     fun exportSettings(history: List<DownloadItem> = emptyList(), follows: List<FollowedPage> = emptyList()): String =
-        SettingsBackup.encode(sp.all, history, follows)
+        SettingsBackup.encode(currentSettings(), history, follows)
+
+    /** Los ajustes de ahora, con el idioma (que se guarda aparte) incluido. */
+    fun currentSettings(): Map<String, Any?> = sp.all + ("language" to LanguageStore(appContext).load().tag)
 
     /** Aplica los ajustes de una copia. Devuelve cuántos puso, o -1 si el texto no es una copia de QuietDLP. */
     fun importSettings(json: String): Int {
         val values = SettingsBackup.decode(json) ?: return -1
         val e = sp.edit()
         values.forEach { (key, v) ->
+            if (key == "language") {
+                Language.entries.firstOrNull { it.tag == v }?.let { LanguageStore(appContext).save(it) }
+                return@forEach
+            }
             when (v) {
                 is Boolean -> e.putBoolean(key, v)
                 is Int -> e.putInt(key, v)

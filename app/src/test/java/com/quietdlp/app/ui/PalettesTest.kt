@@ -128,4 +128,37 @@ class PalettesTest {
         assertTrue(Palettes.decodeCustom("nope").isEmpty())
         assertEquals(1, Palettes.decodeCustom("""[{"id":"a","name":"A","bg":1,"surface":2,"accent":3,"accent2":4},{"id":"bad"}]""").size)
     }
+
+    @Test
+    fun followingTheSystemPicksDarkOrLightPalette() {
+        assertEquals("obsidian", Palettes.effectiveId("sky", true, true, Palettes.DEFAULT_DARK, Palettes.DEFAULT_LIGHT))
+        assertEquals("paper", Palettes.effectiveId("sky", true, false, Palettes.DEFAULT_DARK, Palettes.DEFAULT_LIGHT))
+        assertEquals("midnight", Palettes.effectiveId("sky", true, true, "midnight", "sky"))
+        assertEquals("sky", Palettes.effectiveId("obsidian", true, false, "midnight", "sky"))
+    }
+
+    @Test
+    fun notFollowingTheSystemKeepsTheChosenPalette() {
+        assertEquals("sky", Palettes.effectiveId("sky", false, true, "obsidian", "paper"))
+        assertEquals("sunset", Palettes.effectiveId("sunset", false, false, "obsidian", "paper"))
+    }
+
+    @Test
+    fun wallpaperStaysAsItIsWhileFollowingTheSystem() {
+        assertEquals(Palettes.SYSTEM, Palettes.effectiveId(Palettes.SYSTEM, true, true, "obsidian", "paper"))
+        assertEquals(Palettes.SYSTEM, Palettes.effectiveId(Palettes.SYSTEM, true, false, "obsidian", "paper"))
+    }
+
+    @Test
+    fun theDefaultPairIsReadableAndMatchesItsMode() {
+        val dark = Palettes.find(Palettes.DEFAULT_DARK, emptyList())!!
+        val light = Palettes.find(Palettes.DEFAULT_LIGHT, emptyList())!!
+        assertTrue(dark.dark)
+        assertTrue(!light.dark)
+        listOf(dark, light).forEach { p ->
+            val s = Palettes.scheme(p)
+            assertTrue(contrast(s.onBackground, s.background) >= 7f)
+            assertTrue(contrast(s.primary, s.background) >= 4.5f)
+        }
+    }
 }
