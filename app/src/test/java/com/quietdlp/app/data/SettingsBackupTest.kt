@@ -102,10 +102,11 @@ class SettingsBackupTest {
     }
 
     @Test
-    fun importedDownloadAndFollowLinksMustBeWebLinks() {
+    fun invalidHistoryLinksAreSkippedButFollowLinksStillRequireWebLinks() {
         val root = JSONObject(SettingsBackup.encode(emptyMap<String, Any?>(), listOf(row("a", State.DONE))))
         root.getJSONArray("history").getJSONObject(0).put("url", "file:///synthetic/source")
-        assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check(root.toString()))
+        assertTrue(SettingsBackup.check(root.toString()) is SettingsBackup.Check.Ready)
+        assertTrue(SettingsBackup.decodeHistory(root.toString()).isEmpty())
         val followed = JSONObject(SettingsBackup.encode(emptyMap<String, Any?>(), follows = listOf(FollowedPage("p", "https://example.com/page", "Page"))))
         followed.getJSONArray("follows").getJSONObject(0).put("url", "content://synthetic/source")
         assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check(followed.toString()))
@@ -151,13 +152,56 @@ class SettingsBackupTest {
 
     @Test
     fun damagedSectionsAndNonIntegerFormatAreRejected() {
-        listOf("\"history\":{}", "\"follows\":true", "\"history\":[{}]").forEach { section ->
+        listOf("\"history\":{}", "\"follows\":true").forEach { section ->
             assertEquals(SettingsBackup.Check.NotAProfile,
                 SettingsBackup.check("""{"app":"QuietDLP","format":1,"settings":{},$section}"""))
         }
         listOf("1.5", "\"1\"", "true").forEach { version ->
             assertEquals(SettingsBackup.Check.NotAProfile,
                 SettingsBackup.check("""{"app":"QuietDLP","format":$version,"settings":{}}"""))
+        }
+    }
+
+    @Test
+    fun oneInvalidHistoryRowDoesNotPreventExportingSettingsOrGoodRows() {
+        val input = com.quietdlp.app.download.UrlUtils.extract("https://[")!!
+        val json = SettingsBackup.encode(mapOf("language" to "es"), listOf(
+            row("good", State.DONE), row("bad", State.FAILED).copy(url = input)))
+        assertEquals("es", SettingsBackup.decode(json)!!["language"])
+        assertEquals(listOf("good"), SettingsBackup.decodeHistory(json).map { it.id })
+        assertEquals(1L, (SettingsBackup.check(json) as SettingsBackup.Check.Ready).omittedHistory)
+    }
+
+    @Test
+    fun previewCountsMalformedInvalidAndDuplicateHistoryRowsWithoutDiscardingSettings() {
+        val root = JSONObject(SettingsBackup.encode(mapOf("wifi_only" to true), listOf(row("good", State.DONE))))
+        val rows = root.getJSONArray("history")
+        rows.put(JSONObject(rows.getJSONObject(0).toString()))
+        rows.put(JSONObject(rows.getJSONObject(0).toString()).put("id", "bad").put("url", "file:///synthetic/source"))
+        rows.put(JSONObject())
+        val ready = SettingsBackup.check(root.toString()) as SettingsBackup.Check.Ready
+        assertEquals(1, ready.history)
+        assertEquals(3L, ready.omittedHistory)
+        assertEquals(true, ready.values["wifi_only"])
+        assertEquals(listOf("good"), SettingsBackup.decodeHistory(root.toString()).map { it.id })
+    }
+
+    @Test
+    fun aProfileWithOnlyBadHistoryCanStillRestoreItsSettings() {
+        val root = JSONObject(SettingsBackup.encode(mapOf("language" to "es")))
+            .put("history", JSONArray().put(JSONObject()))
+        val ready = SettingsBackup.check(root.toString()) as SettingsBackup.Check.Ready
+        assertEquals(0, ready.history)
+        assertEquals(1L, ready.omittedHistory)
+        val applied = mutableMapOf<String, Any?>()
+        SettingsBackup.restore(root.toString()) { key, value -> applied[key] = value }
+        assertEquals("es", applied["language"])
+    }
+
+    @Test
+    fun aKnownExportKeyWithAWrongTypeFailsInsteadOfDisappearing() {
+        org.junit.Assert.assertThrows(SettingsBackup.InvalidData::class.java) {
+            SettingsBackup.encode(mapOf("wifi_only" to "true"))
         }
     }
 

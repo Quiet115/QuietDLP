@@ -109,6 +109,7 @@ import com.quietdlp.app.data.SponsorChoice
 import com.quietdlp.app.download.Errors
 import com.quietdlp.app.data.DownloadItem
 import com.quietdlp.app.data.DownloadMode
+import com.quietdlp.app.data.UpdateOperationState
 import com.quietdlp.app.data.HistoryFilter
 import com.quietdlp.app.data.HistoryGroups
 import com.quietdlp.app.data.HistoryRow
@@ -159,11 +160,12 @@ fun MainScreen(vm: MainViewModel) {
     }
 
     val notice = rememberUpdateNotice(vm.updateBannerStartedAt, vm::closeUpdateBanner)
+    val updateOperation = UpdateOperationState.from(vm.appUpdateProgress, vm.appUpdateMessage)
     Column(Modifier.fillMaxSize()) {
     Box(
         Modifier.weight(1f).fillMaxWidth().let {
             // Con el aviso a la vista, ya cubre la barra de navegación: lo de arriba no debe reservarla otra vez.
-            if (notice.visible) it.consumeWindowInsets(WindowInsets.navigationBars) else it
+            if (notice.visible || updateOperation.visible) it.consumeWindowInsets(WindowInsets.navigationBars) else it
         },
     ) {
         Scaffold(
@@ -241,7 +243,7 @@ fun MainScreen(vm: MainViewModel) {
         if (!vm.permissionsWelcomeSeen) PermissionsWelcome(vm::finishPermissionsWelcome)
     }
     // Aviso de versión nueva, abajo y por encima de todas las pantallas: empuja el contenido hacia arriba en vez de taparlo.
-    UpdateNoticeCard(vm, notice)
+    if (updateOperation.visible) UpdateOperationCard(vm, updateOperation) else UpdateNoticeCard(vm, notice)
     }
 
     if (vm.showUpdateNotice && vm.permissionsWelcomeSeen) UpdateNoticeDialog(vm)

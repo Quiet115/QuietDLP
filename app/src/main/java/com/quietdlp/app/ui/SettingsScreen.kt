@@ -698,6 +698,7 @@ private fun BackupSection(vm: MainViewModel) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(Strings.get(R.string.profile_reset_notice))
+                    if (preview.omittedHistory > 0) Text(Strings.get(R.string.profile_history_omitted, preview.omittedHistory))
                     if (preview.changes.isEmpty()) {
                         Text(Strings.get(R.string.profile_no_changes))
                     } else {

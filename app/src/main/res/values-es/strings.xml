@@ -606,6 +606,7 @@
     <string name="tm_portrait">Vertical</string>
     <string name="tm_landscape">Horizontal</string>
     <string name="update_banner_title">¡Hay una actualización disponible!</string>
+    <string name="update_operation_title">Actualización de QuietDLP</string>
     <string name="update_banner_install">Descargar e instalar</string>
     <string name="update_banner_close">Cerrar</string>
     <string name="update_banner_ring_desc">Tiempo restante: %1$s segundos</string>
@@ -699,6 +700,8 @@
     <string name="profile_export">Exportar</string>
     <string name="profile_import">Importar</string>
     <string name="profile_exported">Perfil guardado.</string>
+    <string name="profile_exported_with_omissions">Perfil guardado. Filas del historial omitidas: %1$s (no válidas o repetidas).</string>
+    <string name="profile_history_omitted">Filas del historial omitidas: %1$s (no válidas o repetidas). Los demás ajustes se pueden importar.</string>
     <string name="profile_imported">Perfil importado.</string>
     <string name="profile_not_valid">Ese archivo no es un perfil de ajustes de QuietDLP válido.</string>
     <string name="profile_newer">Este perfil viene de una versión más nueva de QuietDLP. Actualiza la app e inténtalo de nuevo.</string>

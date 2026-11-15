@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,6 +51,7 @@ import com.quietdlp.app.MainViewModel
 import com.quietdlp.app.R
 import com.quietdlp.app.Strings
 import com.quietdlp.app.data.UpdateNoticeTimer
+import com.quietdlp.app.data.UpdateOperationState
 import kotlinx.coroutines.delay
 
 // Con movimiento reducido, el anillo avanza a saltos.
@@ -119,6 +121,31 @@ fun UpdateNoticeCard(vm: MainViewModel, ui: UpdateNoticeUi) {
                         Text(Strings.get(R.string.update_banner_close))
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun UpdateOperationCard(vm: MainViewModel, state: UpdateOperationState) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        modifier = Modifier.navigationBarsPadding().imePadding().fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(Strings.get(R.string.update_operation_title), style = MaterialTheme.typography.titleMedium)
+            state.progress?.let { progress ->
+                LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
+                Text(Strings.get(R.string.main_screen_downloading, progress), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+            state.message?.let { message ->
+                Text(message, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
+            TextButton(onClick = vm::dismissAppUpdateStatus, enabled = !vm.appUpdateBusy, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(Strings.get(R.string.update_banner_close))
             }
         }
     }

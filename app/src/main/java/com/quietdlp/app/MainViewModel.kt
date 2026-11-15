@@ -593,6 +593,10 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         updateBannerStartedAt = 0L
     }
 
+    fun dismissAppUpdateStatus() {
+        if (!appUpdateBusy) appUpdateMessage = null
+    }
+
     /** Solo para pruebas en builds de depuración: finge que hay una versión nueva. */
     fun debugForceUpdate() {
         if (!AppUpdater.isDebuggable(app)) return
@@ -1533,7 +1537,9 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     val json = if (withData) prefs.exportSettings(DownloadRepository.items.value, FollowStore.pages.value) else prefs.exportSettings()
                     app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                         ?: error(Strings.get(R.string.main_view_model_couldn_t_write_the_file))
-                    Strings.get(R.string.profile_exported)
+                    val omitted = (SettingsBackup.check(json) as SettingsBackup.Check.Ready).omittedHistory
+                    if (omitted > 0) Strings.get(R.string.profile_exported_with_omissions, omitted)
+                    else Strings.get(R.string.profile_exported)
                 }.getOrElse {
                     if (it is CancellationException) throw it
                     if (it is SettingsBackup.TooLarge) Strings.get(R.string.profile_export_too_large)
@@ -1545,7 +1551,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     /** Un perfil leído y revisado, a la espera de que el usuario confirme. */
-    class ProfilePreview(val json: String, val changes: Map<SettingsBackup.Group, Int>, val history: Int, val follows: Int)
+    class ProfilePreview(val json: String, val changes: Map<SettingsBackup.Group, Int>, val history: Int, val follows: Int, val omittedHistory: Long)
 
     var profilePreview by mutableStateOf<ProfilePreview?>(null)
         private set
@@ -1598,7 +1604,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                         SettingsBackup.Check.NotAProfile -> Strings.get(R.string.profile_not_valid)
                         SettingsBackup.Check.FromNewerVersion -> Strings.get(R.string.profile_newer)
                         is SettingsBackup.Check.Ready -> {
-                            profilePreview = ProfilePreview(text, SettingsBackup.changes(check.values, prefs.currentSettings()), check.history, check.follows)
+                            profilePreview = ProfilePreview(text, SettingsBackup.changes(check.values, prefs.currentSettings()), check.history, check.follows, check.omittedHistory)
                             null
                         }
                     }

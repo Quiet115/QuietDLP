@@ -44,7 +44,7 @@ object SettingsBackup {
 
         data object FromNewerVersion : Check
 
-        data class Ready(val values: Map<String, Any>, val history: Int, val follows: Int) : Check
+        data class Ready(val values: Map<String, Any>, val history: Int, val follows: Int, val omittedHistory: Long = 0L) : Check
     }
 
     fun check(json: String): Check {
@@ -55,7 +55,9 @@ object SettingsBackup {
         if (format > FORMAT) return Check.FromNewerVersion
         if (format < 1) return Check.NotAProfile
         val values = decode(json) ?: return Check.NotAProfile
-        return Check.Ready(values, decodeHistory(json).size, decodeFollows(json).size)
+        val (history, omitted) = historyRows(root)
+        val previouslyOmitted = (root.opt("historyOmitted") as? Int)?.coerceAtLeast(0) ?: 0
+        return Check.Ready(values, history.size, decodeFollows(json).size, previouslyOmitted.toLong() + omitted)
     }
 
     fun changes(values: Map<String, Any>, current: Map<String, *>): Map<Group, Int> {
@@ -82,11 +84,14 @@ object SettingsBackup {
         KEYS.forEach { (key, type) ->
             val v = values[key]
             if (v is String && v.length > 200_000) throw TooLarge()
+            if (v != null && !matches(type, v)) throw InvalidData()
             if (matches(type, v)) settings.put(key, v)
         }
         val root = JSONObject().put("app", APP).put("format", FORMAT).put("settings", settings)
-        val done = history.filterNot { it.isActive }
+        val finished = history.filterNot { it.isActive }
+        val done = finished.filter { isHistoryLink(it.url) }.distinctBy { it.id }
         if (done.size > HistoryJson.MAX_ITEMS) throw TooLarge()
+        if (finished.size > done.size) root.put("historyOmitted", finished.size - done.size)
         if (done.isNotEmpty()) root.put("history", JSONArray(HistoryJson.encode(done.map(::portableHistoryItem))))
         // Al restaurar una página, lo que ya existe se da por visto.
         if (follows.isNotEmpty()) root.put("follows", JSONArray(FollowJson.encode(follows.map {
@@ -105,9 +110,7 @@ object SettingsBackup {
         if (root.optString("app") != APP || format !in 1..FORMAT || root.optJSONObject("settings") == null) return null
         if (root.has("history")) {
             val rows = root.optJSONArray("history") ?: return null
-            val history = HistoryJson.decode(rows.toString())
-            if (rows.length() > HistoryJson.MAX_ITEMS || history.size != rows.length() ||
-                history.any { !isWebLink(it.url) && !it.url.startsWith(CONVERT_URL_PREFIX) }) return null
+            if (historyRows(root).first.size > HistoryJson.MAX_ITEMS) return null
         }
         if (root.has("follows")) {
             val rows = root.optJSONArray("follows") ?: return null
@@ -118,10 +121,18 @@ object SettingsBackup {
     }
 
     fun decodeHistory(json: String): List<DownloadItem> {
-        val rows = parse(json)?.optJSONArray("history") ?: return emptyList()
+        val root = parse(json) ?: return emptyList()
         // Incluso las copias antiguas son datos externos, no autorización para actuar sobre archivos.
-        return HistoryJson.decode(rows.toString()).distinctBy { it.id }.map(::portableHistoryItem)
+        return historyRows(root).first.map(::portableHistoryItem)
     }
+
+    private fun historyRows(root: JSONObject): Pair<List<DownloadItem>, Int> {
+        val rows = root.optJSONArray("history") ?: return emptyList<DownloadItem>() to 0
+        val kept = HistoryJson.decode(rows.toString()).filter { isHistoryLink(it.url) }.distinctBy { it.id }
+        return kept to rows.length() - kept.size
+    }
+
+    private fun isHistoryLink(url: String): Boolean = isWebLink(url) || url.startsWith(CONVERT_URL_PREFIX)
 
     private fun portableHistoryItem(item: DownloadItem): DownloadItem = item.copy(
         savedUris = emptyList(),
