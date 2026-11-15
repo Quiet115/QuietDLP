@@ -6,7 +6,7 @@ enum class PermState { GRANTED, DENIED, LIMITED }
 
 object PermissionList {
     fun applicable(sdk: Int): List<AppPermission> = buildList {
-        if (sdk >= 33) add(AppPermission.NOTIFICATIONS)
+        add(AppPermission.NOTIFICATIONS)
         if (sdk <= 28) add(AppPermission.STORAGE)
         if (sdk >= 23) add(AppPermission.BATTERY)
         if (sdk >= 26) add(AppPermission.INSTALL)

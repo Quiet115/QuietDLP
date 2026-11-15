@@ -13,21 +13,21 @@ class PermissionListTest {
     }
 
     @Test
-    fun androidTwelveHasNoNotificationPermission() {
-        assertEquals(listOf(AppPermission.BATTERY, AppPermission.INSTALL), PermissionList.applicable(32))
+    fun androidTwelveStillListsNotificationSettings() {
+        assertEquals(listOf(AppPermission.NOTIFICATIONS, AppPermission.BATTERY, AppPermission.INSTALL), PermissionList.applicable(32))
     }
 
     @Test
     fun androidNineNeedsStorage() {
         assertEquals(
-            listOf(AppPermission.STORAGE, AppPermission.BATTERY, AppPermission.INSTALL),
+            listOf(AppPermission.NOTIFICATIONS, AppPermission.STORAGE, AppPermission.BATTERY, AppPermission.INSTALL),
             PermissionList.applicable(28),
         )
     }
 
     @Test
-    fun androidSevenOnlyHasBattery() {
-        assertEquals(listOf(AppPermission.STORAGE, AppPermission.BATTERY), PermissionList.applicable(24))
+    fun androidSevenListsNotificationsStorageAndBattery() {
+        assertEquals(listOf(AppPermission.NOTIFICATIONS, AppPermission.STORAGE, AppPermission.BATTERY), PermissionList.applicable(24))
     }
 
     @Test

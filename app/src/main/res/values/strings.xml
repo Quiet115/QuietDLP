@@ -691,6 +691,8 @@
     <string name="follow_system_light">In light mode</string>
     <string name="kw_follow_system">system dark light mode night day automatic theme</string>
     <string name="update_notify_help">Shows a short notice when you open the app.</string>
+    <string name="perm_review_title">You can continue without these permissions</string>
+    <string name="perm_continue">Continue</string>
     <string name="profile_title">Settings profile</string>
     <string name="profile_help">All your settings, theme, own palettes and language in one file. Import it on another phone to get the same app.</string>
     <string name="profile_not_included">Not included: site keys, sessions, the chosen folder and permissions.</string>

@@ -689,6 +689,8 @@
     <string name="follow_system_light">En modo claro</string>
     <string name="kw_follow_system">sistema oscuro claro modo noche día automático tema</string>
     <string name="update_notify_help">Muestra un aviso corto al abrir la app.</string>
+    <string name="perm_review_title">Puedes continuar sin estos permisos</string>
+    <string name="perm_continue">Continuar</string>
     <string name="profile_title">Perfil de ajustes</string>
     <string name="profile_help">Todos tus ajustes, tema, paletas propias e idioma en un archivo. Impórtalo en otro teléfono para tener la misma app.</string>
     <string name="profile_not_included">No incluye: claves de sitios, sesiones, la carpeta elegida ni los permisos.</string>

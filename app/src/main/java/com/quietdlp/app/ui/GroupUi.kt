@@ -369,15 +369,18 @@ fun DataPromptDialog(vm: MainViewModel) {
 }
 
 /** Abre el ajuste de Android para dejar a QuietDLP sin restricciones de batería (si no se puede ir directo, la lista). */
-fun openBatterySetting(ctx: Context, listOnly: Boolean = false) {
+internal fun batterySettingIntents(ctx: Context, listOnly: Boolean = false): List<Intent> {
     val me = Uri.parse("package:${ctx.packageName}")
     val direct = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).setData(me)
     val list = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
     val appInfo = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(me)
     // La solicitud directa pone a QuietDLP en la excepción con un solo toque. Si el teléfono no la abre, la lista de
     // Android y, al final, la ficha de la app (de ahí se llega a Batería).
-    val tries = if (listOnly) listOf(list, appInfo) else listOf(direct, list, appInfo)
-    if (tries.none { runCatching { ctx.startActivity(it) }.isSuccess }) {
+    return if (listOnly) listOf(list, appInfo) else listOf(direct, list, appInfo)
+}
+
+fun openBatterySetting(ctx: Context, listOnly: Boolean = false) {
+    if (batterySettingIntents(ctx, listOnly).none { runCatching { ctx.startActivity(it) }.isSuccess }) {
         Toast.makeText(ctx, Strings.get(R.string.group_ui_couldn_t_open_the_battery), Toast.LENGTH_SHORT).show()
     }
 }
