@@ -138,6 +138,13 @@ class PalettesTest {
     }
 
     @Test
+    fun anImportedPairWithTheWrongModeFallsBackToTheDefaultPair() {
+        assertEquals("obsidian", Palettes.effectiveId("sky", true, true, "paper", "obsidian"))
+        assertEquals("paper", Palettes.effectiveId("sky", true, false, "paper", "obsidian"))
+        assertEquals("obsidian", Palettes.effectiveId("sky", true, true, "missing", "paper"))
+    }
+
+    @Test
     fun notFollowingTheSystemKeepsTheChosenPalette() {
         assertEquals("sky", Palettes.effectiveId("sky", false, true, "obsidian", "paper"))
         assertEquals("sunset", Palettes.effectiveId("sunset", false, false, "obsidian", "paper"))

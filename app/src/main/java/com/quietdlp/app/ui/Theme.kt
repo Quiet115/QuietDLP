@@ -72,7 +72,7 @@ fun QuietTheme(
 ) {
     val ctx = LocalContext.current
     val systemDark = isSystemInDarkTheme()
-    val paletteId = Palettes.effectiveId(chosenPaletteId, followSystem, systemDark, darkId, lightId)
+    val paletteId = Palettes.effectiveId(chosenPaletteId, followSystem, systemDark, darkId, lightId, custom)
     val useSystem = paletteId == Palettes.SYSTEM && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val colors = if (useSystem) {
         if (systemDark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)

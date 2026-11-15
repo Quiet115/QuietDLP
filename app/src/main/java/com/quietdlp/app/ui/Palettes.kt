@@ -51,8 +51,12 @@ object Palettes {
      * La paleta que se dibuja. Con [followSystem] activado manda el modo del sistema: [darkId] en oscuro y [lightId] en
      * claro. «Wallpaper» sigue como siempre (su modo ya lo da el sistema), y sin seguir el sistema vale la elegida.
      */
-    fun effectiveId(paletteId: String, followSystem: Boolean, systemDark: Boolean, darkId: String, lightId: String): String =
-        if (!followSystem || paletteId == SYSTEM) paletteId else if (systemDark) darkId else lightId
+    fun effectiveId(paletteId: String, followSystem: Boolean, systemDark: Boolean, darkId: String, lightId: String, custom: List<PaletteSpec> = emptyList()): String {
+        if (!followSystem || paletteId == SYSTEM) return paletteId
+        val requested = if (systemDark) darkId else lightId
+        return find(requested, custom)?.takeIf { it.dark == systemDark }?.id
+            ?: if (systemDark) DEFAULT_DARK else DEFAULT_LIGHT
+    }
     const val MAX_CUSTOM = 12
 
     private const val TEXT_LIGHT = 0xFFE7EBF1.toInt()
