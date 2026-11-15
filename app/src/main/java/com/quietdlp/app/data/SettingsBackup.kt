@@ -3,12 +3,14 @@ package com.quietdlp.app.data
 import org.json.JSONArray
 import org.json.JSONObject
 
-// El historial guarda referencias a archivos. Los permisos de carpeta solo valen en el dispositivo que los concedió.
+// Los permisos y las referencias a archivos no se transfieren a otro dispositivo.
 object SettingsBackup {
     private const val APP = "QuietDLP"
     private const val FORMAT = 1
 
     const val MAX_BYTES = 8_000_000
+
+    class TooLarge : IllegalArgumentException()
 
     // Solo viajan ajustes portables. Los datos ligados al dispositivo o a la hora quedan fuera.
     val KEYS: Map<String, Char> = mapOf(
@@ -45,9 +47,10 @@ object SettingsBackup {
     }
 
     fun check(json: String): Check {
+        if (json.toByteArray(Charsets.UTF_8).size > MAX_BYTES) return Check.NotAProfile
         val root = runCatching { JSONObject(json) }.getOrNull() ?: return Check.NotAProfile
         if (root.optString("app") != APP) return Check.NotAProfile
-        val format = root.optInt("format", 0)
+        val format = root.opt("format") as? Int ?: return Check.NotAProfile
         if (format > FORMAT) return Check.FromNewerVersion
         if (format < 1) return Check.NotAProfile
         val values = decode(json) ?: return Check.NotAProfile
@@ -56,8 +59,10 @@ object SettingsBackup {
 
     fun changes(values: Map<String, Any>, current: Map<String, *>): Map<Group, Int> {
         val out = LinkedHashMap<Group, Int>()
-        for ((key, v) in values) {
-            if (current[key] == v) continue
+        for (key in KEYS.keys) {
+            val v = values[key] ?: if (key == "language") "en" else null
+            val previous = current[key] ?: if (key == "language") "en" else null
+            if (previous == v) continue
             val g = groupOf(key)
             out[g] = (out[g] ?: 0) + 1
         }
@@ -75,24 +80,40 @@ object SettingsBackup {
         val settings = JSONObject()
         KEYS.forEach { (key, type) ->
             val v = values[key]
+            if (v is String && v.length > 200_000) throw TooLarge()
             if (matches(type, v)) settings.put(key, v)
         }
         val root = JSONObject().put("app", APP).put("format", FORMAT).put("settings", settings)
         val done = history.filterNot { it.isActive }
-        if (done.isNotEmpty()) root.put("history", JSONArray(HistoryJson.encode(done)))
+        if (done.size > HistoryJson.MAX_ITEMS) throw TooLarge()
+        if (done.isNotEmpty()) root.put("history", JSONArray(HistoryJson.encode(done.map { it.copy(savedUris = emptyList()) })))
         // Al restaurar una página, lo que ya existe se da por visto.
         if (follows.isNotEmpty()) root.put("follows", JSONArray(FollowJson.encode(follows.map { it.copy(pending = emptyList(), lastError = null, counter = 0) })))
-        return root.toString(2)
+        return root.toString(2).also {
+            if (it.toByteArray(Charsets.UTF_8).size > MAX_BYTES) throw TooLarge()
+        }
     }
 
     private fun parse(json: String): JSONObject? {
+        if (json.toByteArray(Charsets.UTF_8).size > MAX_BYTES) return null
         val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
-        return if (root.optString("app") == APP && root.optInt("format", 0) in 1..FORMAT) root else null
+        val format = root.opt("format") as? Int ?: return null
+        if (root.optString("app") != APP || format !in 1..FORMAT || root.optJSONObject("settings") == null) return null
+        if (root.has("history")) {
+            val rows = root.optJSONArray("history") ?: return null
+            if (rows.length() > HistoryJson.MAX_ITEMS || HistoryJson.decode(rows.toString()).size != rows.length()) return null
+        }
+        if (root.has("follows")) {
+            val rows = root.optJSONArray("follows") ?: return null
+            if (FollowJson.decode(rows.toString()).size != rows.length()) return null
+        }
+        return root
     }
 
     fun decodeHistory(json: String): List<DownloadItem> {
         val rows = parse(json)?.optJSONArray("history") ?: return emptyList()
-        return HistoryJson.decode(rows.toString())
+        // Incluso las copias antiguas son datos externos, no autorización para actuar sobre archivos.
+        return HistoryJson.decode(rows.toString()).distinctBy { it.id }.map { it.copy(savedUris = emptyList()) }
     }
 
     fun decodeFollows(json: String): List<FollowedPage> {
@@ -107,8 +128,15 @@ object SettingsBackup {
         KEYS.forEach { (key, type) ->
             if (!settings.has(key)) return@forEach
             val v = settings.opt(key)
-            if (matches(type, v)) out[key] = v!!
+            if (matches(type, v) && (key != "language" || v in listOf("en", "es"))) out[key] = v!!
         }
         return out
+    }
+
+    // null restaura el valor predeterminado; nunca se tocan claves ajenas al perfil.
+    fun restore(json: String, write: (String, Any?) -> Unit): Int {
+        val values = decode(json) ?: return -1
+        KEYS.keys.forEach { key -> write(key, values[key] ?: if (key == "language") "en" else null) }
+        return values.size
     }
 }

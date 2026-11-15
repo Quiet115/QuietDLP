@@ -66,7 +66,7 @@
     <string name="feature_history_title">Historial</string>
     <string name="feature_history_body">Compartir, borrar, aviso de enlaces repetidos y reintento automático si se corta la conexión.</string>
     <string name="feature_backup_title">Copia de seguridad</string>
-    <string name="feature_backup_body">Guarda tus ajustes, historial y páginas seguidas en un archivo y restáuralos después.</string>
+    <string name="feature_backup_body">Transfiere los ajustes a otro teléfono. El historial y las páginas seguidas son opcionales; el acceso a archivos y las sesiones se quedan en el teléfono original.</string>
     <string name="feature_updates_title">Actualizaciones</string>
     <string name="feature_updates_body">yt-dlp, gallery-dl y la propia app pueden actualizarse solos. Puedes desactivarlo.</string>
     <string name="feature_appearance_title">Apariencia</string>
@@ -701,7 +701,10 @@
     <string name="profile_not_valid">Ese archivo no es un perfil de ajustes de QuietDLP válido.</string>
     <string name="profile_newer">Este perfil viene de una versión más nueva de QuietDLP. Actualiza la app e inténtalo de nuevo.</string>
     <string name="profile_import_title">Importar perfil de ajustes</string>
-    <string name="profile_will_change">Esto va a cambiar:</string>
+    <string name="profile_will_change">Ajustes que se aplicarán o restablecerán:</string>
+    <string name="profile_reset_notice">Los ajustes que falten en este perfil vuelven a sus valores predeterminados. Las sesiones, claves y el acceso a carpetas se conservan en este teléfono.</string>
+    <string name="profile_history_unlinked">El historial importado enumera descargas, sin acceso a los archivos del teléfono de origen.</string>
+    <string name="profile_export_too_large">Este perfil supera el tamaño admitido. Prueba a exportar los ajustes sin historial ni páginas seguidas.</string>
     <string name="profile_no_changes">Nada que cambiar: tus ajustes ya coinciden con este perfil.</string>
     <string name="profile_data_found">El archivo trae %1$s elementos de historial y %2$s páginas seguidas.</string>
 </resources>

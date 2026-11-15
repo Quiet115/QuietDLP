@@ -1534,7 +1534,11 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                     app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
                         ?: error(Strings.get(R.string.main_view_model_couldn_t_write_the_file))
                     Strings.get(R.string.profile_exported)
-                }.getOrElse { Strings.get(R.string.main_view_model_couldn_t_save, it.message) }
+                }.getOrElse {
+                    if (it is CancellationException) throw it
+                    if (it is SettingsBackup.TooLarge) Strings.get(R.string.profile_export_too_large)
+                    else Strings.get(R.string.main_view_model_couldn_t_save, it.message)
+                }
             }
         }
     }

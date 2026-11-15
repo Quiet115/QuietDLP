@@ -698,6 +698,7 @@ private fun BackupSection(vm: MainViewModel) {
             title = { Text(Strings.get(R.string.profile_import_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(Strings.get(R.string.profile_reset_notice))
                     if (preview.changes.isEmpty()) {
                         Text(Strings.get(R.string.profile_no_changes))
                     } else {
@@ -707,6 +708,7 @@ private fun BackupSection(vm: MainViewModel) {
                         }
                     }
                     if (hasData) {
+                        Text(Strings.get(R.string.profile_history_unlinked), style = MaterialTheme.typography.bodySmall)
                         SwitchRow(
                             Strings.get(R.string.profile_with_data),
                             Strings.get(R.string.profile_data_found, preview.history, preview.follows),

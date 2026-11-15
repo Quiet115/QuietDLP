@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.json.JSONArray
+import org.json.JSONObject
 
 class SettingsBackupTest {
 
@@ -67,7 +69,56 @@ class SettingsBackupTest {
         )
         val back = SettingsBackup.decodeHistory(json)
         assertEquals(listOf("a", "c"), back.map { it.id })
-        assertEquals(listOf("content://media/1"), back.first().savedUris)
+        assertTrue(back.first().savedUris.isEmpty())
+    }
+
+    @Test
+    fun importedHistoryCannotSupplyFileActionsOrDuplicateRows() {
+        val original = row("a", State.DONE).copy(savedUris = listOf("file:///synthetic/private-marker", "content://media/1"))
+        val json = SettingsBackup.encode(emptyMap<String, Any?>(), listOf(original, original))
+        val back = SettingsBackup.decodeHistory(json)
+        assertEquals(1, back.size)
+        assertTrue(back.single().savedUris.isEmpty())
+        assertFalse(json.contains("private-marker"))
+        val oldProfile = JSONObject(json)
+        oldProfile.getJSONArray("history").getJSONObject(0)
+            .put("savedUris", JSONArray(listOf("file:///synthetic/private-marker")))
+        assertTrue(SettingsBackup.decodeHistory(oldProfile.toString()).single().savedUris.isEmpty())
+    }
+
+    @Test
+    fun aProfileOverTheByteLimitIsRejectedBeforeItCanBeImported() {
+        val json = SettingsBackup.encode(emptyMap<String, Any?>()).dropLast(1) +
+            ",\"padding\":\"" + "é".repeat(SettingsBackup.MAX_BYTES / 2) + "\"}"
+        assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check(json))
+    }
+
+    @Test
+    fun historyBeyondTheSupportedLimitIsNotSilentlyExported() {
+        val rows = (1..HistoryJson.MAX_ITEMS + 1).map { row("i$it", State.DONE) }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            SettingsBackup.encode(emptyMap<String, Any?>(), rows)
+        }
+    }
+
+    @Test
+    fun anExportOverTheImportLimitFailsInsteadOfCreatingAnUnusableCopy() {
+        val rows = (1..50).map { row("i$it", State.DONE).copy(title = "é".repeat(100_000)) }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            SettingsBackup.encode(emptyMap<String, Any?>(), rows)
+        }
+    }
+
+    @Test
+    fun damagedSectionsAndNonIntegerFormatAreRejected() {
+        listOf("\"history\":{}", "\"follows\":true", "\"history\":[{}]").forEach { section ->
+            assertEquals(SettingsBackup.Check.NotAProfile,
+                SettingsBackup.check("""{"app":"QuietDLP","format":1,"settings":{},$section}"""))
+        }
+        listOf("1.5", "\"1\"", "true").forEach { version ->
+            assertEquals(SettingsBackup.Check.NotAProfile,
+                SettingsBackup.check("""{"app":"QuietDLP","format":$version,"settings":{}}"""))
+        }
     }
 
     @Test
@@ -93,8 +144,9 @@ class SettingsBackupTest {
     @Test
     fun aHugeStringIsNotAccepted() {
         val big = "x".repeat(250_000)
-        val back = SettingsBackup.decode(SettingsBackup.encode(mapOf("site_rules" to big)))!!
-        assertFalse("site_rules" in back)
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+            SettingsBackup.encode(mapOf("site_rules" to big))
+        }
     }
 
     @Test
@@ -135,9 +187,33 @@ class SettingsBackupTest {
     }
 
     @Test
-    fun unknownSettingsAreIgnoredAndMissingOnesStayAsTheyAre() {
+    fun unknownAndWronglyTypedSettingsAreIgnored() {
         val json = """{"app":"QuietDLP","format":1,"settings":{"mode":"audio","brand_new":"x","max_parallel":"wrong type"}}"""
         val ready = SettingsBackup.check(json) as SettingsBackup.Check.Ready
         assertEquals(mapOf<String, Any>("mode" to "audio"), ready.values)
+    }
+
+    @Test
+    fun restoringResetsOmittedSettingsButPreservesSecretsAndDeviceState() {
+        val current = mutableMapOf<String, Any>("mode" to "video", "wifi_only" to true,
+            "language" to "es", "site_key" to "synthetic-secret", "folder_uri" to "content://synthetic/folder")
+        SettingsBackup.restore(SettingsBackup.encode(mapOf("mode" to "audio"))) { key, value ->
+            if (value == null) current.remove(key) else current[key] = value
+        }
+        assertEquals(mapOf("mode" to "audio", "language" to "en", "site_key" to "synthetic-secret",
+            "folder_uri" to "content://synthetic/folder"), current)
+    }
+
+    @Test
+    fun invalidProfilesDoNotStartChangingSettings() {
+        var writes = 0
+        assertEquals(-1, SettingsBackup.restore("not json") { _, _ -> writes++ })
+        assertEquals(0, writes)
+    }
+
+    @Test
+    fun previewIncludesSettingsThatWillReturnToDefaults() {
+        val changes = SettingsBackup.changes(mapOf("mode" to "audio"), mapOf("mode" to "audio", "wifi_only" to true, "site_key" to "synthetic"))
+        assertEquals(mapOf(SettingsBackup.Group.QUEUE to 1), changes)
     }
 }

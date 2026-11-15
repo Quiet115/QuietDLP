@@ -6,6 +6,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HistoryGroupsTest {
+
+    @Test
+    fun aSingleIdCannotCollideWithAGroupKey() {
+        val rows = HistoryGroups.rows(listOf(item("g:group"), item("a", "group", 0), item("b", "group", 1)))
+        assertEquals(rows.size, rows.map { it.key }.distinct().size)
+    }
     private fun item(
         id: String,
         group: String? = null,

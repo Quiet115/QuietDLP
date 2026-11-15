@@ -68,7 +68,7 @@
     <string name="feature_history_title">History</string>
     <string name="feature_history_body">Share, delete, a warning for repeated links and automatic retry when the connection drops.</string>
     <string name="feature_backup_title">Backup</string>
-    <string name="feature_backup_body">Save your settings, history and followed pages to a file, and restore them later.</string>
+    <string name="feature_backup_body">Transfer settings to another phone. History and followed pages are optional; file access and sessions stay on the original phone.</string>
     <string name="feature_updates_title">Updates</string>
     <string name="feature_updates_body">yt-dlp, gallery-dl and the app itself can update by themselves. You can turn it off.</string>
     <string name="feature_appearance_title">Appearance</string>
@@ -703,7 +703,10 @@
     <string name="profile_not_valid">That isn\'t a valid QuietDLP settings profile.</string>
     <string name="profile_newer">This profile comes from a newer version of QuietDLP. Update the app and try again.</string>
     <string name="profile_import_title">Import settings profile</string>
-    <string name="profile_will_change">This will change:</string>
+    <string name="profile_will_change">Settings to apply or reset:</string>
+    <string name="profile_reset_notice">Settings missing from this profile return to their defaults. Your sessions, keys and folder access stay on this phone.</string>
+    <string name="profile_history_unlinked">Imported history lists downloads, without access to files on the original phone.</string>
+    <string name="profile_export_too_large">This profile exceeds the supported size. Try exporting settings without history and followed pages.</string>
     <string name="profile_no_changes">Nothing to change: your settings already match this profile.</string>
     <string name="profile_data_found">The file has %1$s history items and %2$s followed pages.</string>
 </resources>

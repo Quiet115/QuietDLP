@@ -249,28 +249,45 @@ class Prefs(context: Context) {
 
     /** Los ajustes (y el historial, si se da) en un texto JSON, para guardarlos en un archivo (ver [SettingsBackup]). */
     fun exportSettings(history: List<DownloadItem> = emptyList(), follows: List<FollowedPage> = emptyList()): String =
-        SettingsBackup.encode(currentSettings(), history, follows)
+        SettingsBackup.encode(portableSettings(), history, follows)
+
+    private fun portableSettings(): Map<String, Any> = mapOf(
+        "quick_direct" to quickShareDirect, "quick_kind" to quickKind.name, "quick_height" to quickMaxHeight,
+        "audio_format" to audioFormat, "audio_bitrate" to audioBitrate, "auto_photo_video" to autoPhotoVideo,
+        "remember_song" to rememberSong, "song_seconds" to songSeconds, "app_update_check" to appUpdateCheck,
+        "photos_enabled" to photosEnabled, "auto_update" to autoUpdate, "mode" to mode.key,
+        "remember_last" to rememberLast, "last_kind" to lastKind.name, "last_height" to lastHeight,
+        "last_audio_format" to lastAudioFormat, "last_audio_bitrate" to lastAudioBitrate,
+        "clipboard_offer" to clipboardOffer, "palette" to paletteId, "custom_palettes" to customPalettes,
+        "advanced" to advanced, "folder_name" to folderName, "orientation" to orientation.key,
+        "support_card" to supportCard, "max_parallel" to maxParallel, "wifi_only" to wifiOnly,
+        "ask_multi" to askMulti, "battery_hint_off" to batteryHintOff, "subs_on" to subsOn,
+        "sub_langs" to subLangs.joinToString(","), "sub_mode" to subMode.id, "cover_audio" to coverAudio,
+        "cover_video" to coverVideo, "music_names" to musicNames, "name_template" to nameTemplate,
+        "sponsor_mode" to sponsorMode, "sponsor_cats" to sponsorCats.joinToString(","), "chapter_mode" to chapterMode,
+        "follow_system_mode" to followSystemMode, "palette_dark" to paletteDark, "palette_light" to paletteLight,
+        "language" to LanguageStore(appContext).load().tag, "site_rules" to siteRules,
+        "follow_wifi" to followWifiOnly, "share_options" to shareOptions,
+    )
 
     /** Los ajustes de ahora, con el idioma (que se guarda aparte) incluido. */
     fun currentSettings(): Map<String, Any?> = sp.all + ("language" to LanguageStore(appContext).load().tag)
 
     /** Aplica los ajustes de una copia. Devuelve cuántos puso, o -1 si el texto no es una copia de QuietDLP. */
     fun importSettings(json: String): Int {
-        val values = SettingsBackup.decode(json) ?: return -1
         val e = sp.edit()
-        values.forEach { (key, v) ->
+        val count = SettingsBackup.restore(json) { key, v ->
             if (key == "language") {
                 Language.entries.firstOrNull { it.tag == v }?.let { LanguageStore(appContext).save(it) }
-                return@forEach
-            }
-            when (v) {
+            } else when (v) {
+                null -> e.remove(key)
                 is Boolean -> e.putBoolean(key, v)
                 is Int -> e.putInt(key, v)
                 is String -> e.putString(key, v)
             }
         }
-        e.apply()
-        return values.size
+        if (count >= 0) e.apply()
+        return count
     }
 
     /** Poner a la música el nombre "Artista - Título" y esos datos dentro del archivo. */

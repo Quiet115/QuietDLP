@@ -4,7 +4,7 @@ sealed interface HistoryRow {
     val key: String
 
     data class Single(val item: DownloadItem) : HistoryRow {
-        override val key: String get() = item.id
+        override val key: String get() = "i:${item.id}"
     }
 
     data class Group(val id: String, val title: String, val items: List<DownloadItem>) : HistoryRow {
