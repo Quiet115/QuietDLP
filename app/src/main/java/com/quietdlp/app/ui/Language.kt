@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import java.util.Locale
 
-/** Idiomas de la app. Inglés es el de serie, no el del sistema. */
+// El idioma inicial es inglés, independientemente del idioma del sistema.
 enum class Language(val tag: String) { ENGLISH("en"), SPANISH("es") }
 
 class LanguageStore(context: Context) {
@@ -18,7 +18,6 @@ class LanguageStore(context: Context) {
     }
 }
 
-/** Devuelve un contexto con el idioma elegido, para que los textos salgan en ese idioma. */
 fun Context.withLanguage(language: Language): Context {
     val config = Configuration(resources.configuration)
     config.setLocale(Locale.forLanguageTag(language.tag))

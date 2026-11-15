@@ -3,9 +3,8 @@ package com.quietdlp.app.data
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Convierte la lista de descargas a JSON y viceversa (funciones puras, para poder probarlas). */
 object HistoryJson {
-    // Una lista de reproducción larga son muchas filas: el tope tiene que dejar sitio a varias.
+    // El tope deja sitio para varias listas de reproducción largas.
     const val MAX_ITEMS = 3000
 
     fun encode(items: List<DownloadItem>): String {

@@ -1,6 +1,6 @@
 package com.quietdlp.app.data
 
-/** Grupos de calidad, de mejor a peor. El orden del enum es el orden en pantalla. */
+// El orden del enum determina el orden en pantalla, de mejor a peor calidad.
 enum class AudioTier(val label: String) {
     ORIGINAL("Original"),
     LOSSLESS("Lossless"),
@@ -9,10 +9,7 @@ enum class AudioTier(val label: String) {
     SMALL("Small"),
 }
 
-/**
- * Una forma de guardar el audio. [format] es el que entiende yt-dlp (`--audio-format`); "best" deja el audio como viene.
- * [bitrate] en kbps solo cuenta en formatos con pérdida; 0 = lo que dé el codificador por defecto.
- */
+// El formato best conserva el audio original. El bitrate va en kbps; 0 usa el valor del codificador.
 data class AudioOption(
     val format: String,
     val bitrate: Int,
@@ -22,7 +19,6 @@ data class AudioOption(
 )
 
 object AudioOptions {
-    /** Todas las opciones, de la mejor calidad a la más pequeña. */
     val all: List<AudioOption> = listOf(
         AudioOption("best", 0, AudioTier.ORIGINAL, "Original", "Best stream, no conversion"),
         AudioOption("flac", 0, AudioTier.LOSSLESS, "FLAC", "Lossless, large. Can't improve a lossy source."),
@@ -39,20 +35,16 @@ object AudioOptions {
 
     val default: AudioOption = all.first { it.format == "m4a" }
 
-    /** Opciones agrupadas por calidad, en orden, sin grupos vacíos. */
     fun byTier(): List<Pair<AudioTier, List<AudioOption>>> =
         AudioTier.entries.map { t -> t to all.filter { it.tier == t } }.filter { it.second.isNotEmpty() }
 
-    /**
-     * La opción que corresponde a un formato y bitrate guardados. Si no existe tal cual (por ejemplo "mp3" sin bitrate,
-     * de versiones anteriores) se usa la primera del mismo formato, o la de por defecto.
-     */
+    // Los valores antiguos sin coincidencia exacta usan la primera opción del formato o la predeterminada.
     fun find(format: String?, bitrate: Int): AudioOption =
         all.firstOrNull { it.format == format && it.bitrate == bitrate }
             ?: all.firstOrNull { it.format == format }
             ?: default
 
-    /** Opciones de yt-dlp para sacar el audio. Un valor `null` es una opción sin argumento. */
+    // null representa una opción sin argumento.
     fun ytDlpOptions(format: String, bitrate: Int): List<Pair<String, String?>> = listOf(
         // Con M4A conviene un audio que ya sea m4a, para no recodificar y perder calidad.
         "-f" to if (format == "m4a") "ba[ext=m4a]/ba/b" else "ba/b",

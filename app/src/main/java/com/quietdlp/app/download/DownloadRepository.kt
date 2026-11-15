@@ -11,10 +11,7 @@ import kotlinx.coroutines.flow.update
 import java.io.File
 import java.util.concurrent.Executors
 
-/**
- * Lista de descargas. El servicio escribe, la pantalla observa. Se guarda en el móvil cuando
- * una descarga empieza, termina o se borra (no en cada avance), y se recupera al abrir la app.
- */
+// Se guarda al iniciar, terminar o borrar una descarga. El progreso queda en memoria.
 object DownloadRepository {
     private val _items = MutableStateFlow<List<DownloadItem>>(emptyList())
     val items: StateFlow<List<DownloadItem>> = _items
@@ -42,16 +39,12 @@ object DownloadRepository {
         save()
     }
 
-    /** Añade varias a la vez (un grupo), en el orden dado y todas juntas arriba de la lista. */
     fun addAll(items: List<DownloadItem>) {
         _items.update { items + it }
         save()
     }
 
-    /**
-     * Pone en la lista las filas de una copia de seguridad que todavía no están (por id), debajo de las actuales: son
-     * más viejas. Devuelve cuántas añadió.
-     */
+    // Las filas restauradas van debajo de las actuales porque son más antiguas.
     fun mergeHistory(ctx: Context, restored: List<DownloadItem>): Int {
         var added: List<DownloadItem> = emptyList()
         _items.update { current ->
@@ -84,7 +77,6 @@ object DownloadRepository {
         save()
     }
 
-    /** Quita varias a la vez (por ejemplo, las que no se pudieron poner en la cola). */
     fun removeAll(ids: Collection<String>) {
         if (ids.isEmpty()) return
         _items.update { list -> list.filterNot { it.id in ids } }

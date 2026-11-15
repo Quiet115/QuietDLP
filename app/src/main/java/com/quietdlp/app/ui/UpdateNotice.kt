@@ -50,18 +50,14 @@ import com.quietdlp.app.Strings
 import com.quietdlp.app.data.UpdateNoticeTimer
 import kotlinx.coroutines.delay
 
-/** ¿La persona pidió reducir las animaciones? Entonces el anillo baja a saltos en vez de vaciarse de forma continua. */
+// Con movimiento reducido, el anillo avanza a saltos.
 @Composable
 private fun rememberReducedMotion(): Boolean {
     val resolver = LocalContext.current.contentResolver
     return remember { Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f }
 }
 
-/**
- * Lo que hace falta para dibujar el aviso: si se ve y cuánto del anillo queda. Mientras se ve, avanza con el reloj del
- * sistema desde el instante guardado, así que rotar la pantalla o cambiar el tema no reinicia los 20 segundos.
- * Mientras se descarga la versión, el aviso no se va.
- */
+// Conservar el instante de inicio evita reiniciar el plazo al recrear la pantalla.
 class UpdateNoticeUi(val visible: Boolean, val fraction: Float, val secondsLeft: Int)
 
 @Composable
@@ -85,7 +81,6 @@ fun rememberUpdateNotice(startedAt: Long, busy: Boolean, onExpired: () -> Unit):
     return UpdateNoticeUi(true, fraction, UpdateNoticeTimer.secondsLeft(startedAt, now))
 }
 
-/** El aviso: «¡Hay una actualización disponible!», un anillo del color de acento que se vacía y dos botones. Sin notas de versión. */
 @Composable
 fun UpdateNoticeCard(vm: MainViewModel, ui: UpdateNoticeUi) {
     AnimatedVisibility(

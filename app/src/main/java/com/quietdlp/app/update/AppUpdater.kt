@@ -14,13 +14,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
-/**
- * Actualizaciones de la propia app. Mira la última versión publicada en GitHub (Releases), descarga el APK,
- * comprueba que es de verdad de QuietDLP (misma firma, versión mayor, SHA-256 si GitHub lo da) y lo abre en el
- * instalador de Android. El usuario siempre confirma la instalación: la app nunca instala nada sola.
- *
- * Solo contacta con api.github.com y con las descargas de ese mismo repositorio; no envía datos personales.
- */
+// Android pide al usuario confirmar la instalación.
 object AppUpdater {
 
     data class Release(
@@ -33,10 +27,7 @@ object AppUpdater {
 
     private const val MAX_APK_BYTES = 200L * 1024 * 1024
 
-    /**
-     * Origen local SOLO para builds de depuración: el PC sirve la versión nueva y `adb reverse` la acerca al móvil
-     * por el cable USB (tools/dev_update.py). Las versiones de publicación nunca lo usan.
-     */
+    // El servidor local solo se consulta en versiones de depuración.
     private const val DEV_BASE = "http://127.0.0.1:8765"
 
     fun isDebuggable(ctx: Context): Boolean =
@@ -45,13 +36,11 @@ object AppUpdater {
     private fun repoConfigured(): Boolean =
         Links.GITHUB_REPO.matches(Regex("""[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+"""))
 
-    /** true si hay algún sitio donde buscar versiones nuevas (el repositorio de GitHub o, en depuración, el origen local). */
     fun isConfigured(ctx: Context): Boolean = isDebuggable(ctx) || repoConfigured()
 
     fun currentVersion(ctx: Context): String =
         runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName }.getOrNull() ?: "0"
 
-    /** true si [candidate] es más nueva que [current]. Compara número a número: 0.10.0 es mayor que 0.9.2. */
     fun isNewer(candidate: String, current: String): Boolean {
         fun parts(v: String) = v.trim().removePrefix("v").removePrefix("V")
             .substringBefore('-').substringBefore('+')
@@ -66,10 +55,6 @@ object AppUpdater {
         return false
     }
 
-    /**
-     * Convierte la respuesta de GitHub (releases/latest) en una [Release]. Devuelve null si no hay un APK
-     * descargable o si su dirección no pertenece al repositorio esperado.
-     */
     fun parseRelease(json: String, repo: String, extraPrefixes: List<String> = emptyList()): Release? {
         val o = JSONObject(json)
         if (o.optBoolean("draft") || o.optBoolean("prerelease")) return null
@@ -83,7 +68,6 @@ object AppUpdater {
             val name = a.optString("name")
             val url = a.optString("browser_download_url")
             if (!name.endsWith(".apk", ignoreCase = true) || prefixes.none { url.startsWith(it) }) continue
-            // Se prefiere el APK "de versión" sobre uno de depuración si hubiera varios.
             if (best == null || (best.optString("name").contains("debug", true) && !name.contains("debug", true))) best = a
         }
         val apk = best ?: return null
@@ -106,9 +90,9 @@ object AppUpdater {
         return c
     }
 
-    /** Bloqueante: llamar desde un hilo de fondo. null = no hay versión publicada o no se pudo leer. */
+    // Bloqueante: llamar desde un hilo de fondo.
     fun fetchLatest(ctx: Context): Release? {
-        // En depuración se mira primero el origen local; si no está encendido, se sigue con GitHub (si hay repositorio).
+        // Si el servidor local está apagado, se consulta el repositorio.
         if (isDebuggable(ctx)) {
             try {
                 val c = open("$DEV_BASE/release.json")
@@ -136,7 +120,7 @@ object AppUpdater {
         }
     }
 
-    /** Descarga el APK a la caché con progreso (0..100). Verifica el SHA-256 si GitHub lo indicó. */
+    // El progreso se expresa de 0 a 100.
     fun download(ctx: Context, release: Release, onProgress: (Int) -> Unit): File {
         val dir = File(ctx.cacheDir, "updates").apply { deleteRecursively(); mkdirs() }
         val out = File(dir, "QuietDLP-${release.version}.apk")
@@ -178,11 +162,7 @@ object AppUpdater {
         return out
     }
 
-    /**
-     * Comprueba que el APK descargado es una versión más nueva de ESTA misma app y está firmado por la misma
-     * clave. Devuelve un mensaje de error, o null si todo está bien. (Android lo vuelve a comprobar al instalar;
-     * esto da un mensaje claro antes.)
-     */
+    // Se comprueba antes del instalador para poder dar un error claro. null indica que pasó la comprobación.
     fun checkApk(ctx: Context, file: File): String? {
         val pm = ctx.packageManager
         val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else 0
@@ -208,11 +188,9 @@ object AppUpdater {
 
     private fun sha256(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 
-    /** true si Android ya permite a QuietDLP lanzar el instalador. */
     fun canInstall(ctx: Context): Boolean =
         Build.VERSION.SDK_INT < 26 || ctx.packageManager.canRequestPackageInstalls()
 
-    /** Pantalla de Android donde el usuario concede "Instalar apps de esta fuente" a QuietDLP. */
     fun permissionIntent(ctx: Context): Intent =
         Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

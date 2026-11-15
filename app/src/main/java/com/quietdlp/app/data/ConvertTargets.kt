@@ -1,18 +1,14 @@
 package com.quietdlp.app.data
 
-/**
- * Un formato al que se puede convertir un archivo ya descargado. [args] son los argumentos de ffmpeg
- * que van entre la entrada y la salida. [quality] es lo que se anota en el historial.
- */
+// Los argumentos van entre la entrada y la salida de ffmpeg. La calidad se anota en el historial.
 data class ConvertTarget(
     val id: String,
     val label: String,
     val hint: String,
     val ext: String,
     val quality: Quality,
-    /** Recodifica el vídeo: tarda mucho y gasta batería. */
+    // La recodificación de vídeo requiere más tiempo y batería.
     val slow: Boolean,
-    /** El resultado es sin pérdida (FLAC, ALAC, WAV). */
     val lossless: Boolean,
     private val args: List<String>,
 ) {
@@ -20,7 +16,6 @@ data class ConvertTarget(
         listOf("-hide_banner", "-nostdin", "-y", "-i", input) + args + listOf("-progress", "pipe:1", "-nostats", output)
 }
 
-/** Opciones de conversión que se ofrecen para un archivo, agrupadas con su título. */
 data class ConvertSection(val title: String, val targets: List<ConvertTarget>)
 
 object ConvertTargets {
@@ -29,7 +24,6 @@ object ConvertTargets {
     fun isAudio(mime: String?) = mime?.startsWith("audio/") == true
     fun isVideo(mime: String?) = mime?.startsWith("video/") == true
 
-    /** ¿Se puede convertir este archivo? Solo audio y vídeo. */
     fun canConvert(mime: String?) = isAudio(mime) || isVideo(mime)
 
     fun isLosslessSource(mime: String?) = mime?.lowercase() in LOSSLESS_MIMES
@@ -105,7 +99,7 @@ object ConvertTargets {
         )
     }
 
-    /** Todos los destinos de audio, de mejor a peor calidad. "Original" no es una conversión. */
+    // Original no es una conversión.
     val audio: List<ConvertTarget> = AudioOptions.all.filter { it.format != "best" }.map(::audioTarget)
 
     private val everything: List<ConvertTarget> by lazy { keepQuality + reEncode + smaller + gif + audio }
@@ -120,7 +114,6 @@ object ConvertTargets {
                 ?.let { ConvertSection(prefix + tier.label, it) }
         }
 
-    /** Lo que se ofrece para un archivo según su tipo. Vacío si no se puede convertir. */
     fun sectionsFor(mime: String?): List<ConvertSection> = when {
         isVideo(mime) -> listOf(
             ConvertSection("Keep quality (fast)", keepQuality),
@@ -132,7 +125,6 @@ object ConvertTargets {
         else -> emptyList()
     }
 
-    /** Aviso corto antes de convertir, o null si no hace falta. */
     fun warning(target: ConvertTarget, sourceMime: String?): String? {
         if (target.slow) return "Re-encoding is slow and uses battery. Keep the phone charging."
         if (target.quality.kind != Kind.AUDIO) return null
@@ -144,7 +136,6 @@ object ConvertTargets {
         }
     }
 
-    /** Nombre del archivo nuevo: "Título (FLAC).flac", sin caracteres que el sistema de archivos rechace. */
     fun outputName(title: String, target: ConvertTarget): String {
         val clean = title.replace(Regex("""[\\/:*?"<>|\u0000-\u001f]"""), " ").replace(Regex("""\s+"""), " ").trim()
             .removeSuffix(".").trim().ifBlank { "Converted" }.take(100).trim()

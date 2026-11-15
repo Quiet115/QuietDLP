@@ -3,26 +3,14 @@ package com.quietdlp.app.data
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Copia de seguridad de los ajustes y del historial en un archivo JSON. No lleva las sesiones ni la carpeta elegida
- * (ese permiso es de este móvil y no se puede pasar a otro). Los archivos descargados no van dentro: el historial
- * solo apunta a ellos.
- *
- * El historial ya sobrevive a las actualizaciones (vive en los datos de la app); esta copia sirve para conservarlo si
- * hay que desinstalar la app o se cambia de móvil.
- */
+// El historial guarda referencias a archivos. Los permisos de carpeta solo valen en el dispositivo que los concedió.
 object SettingsBackup {
     private const val APP = "QuietDLP"
     private const val FORMAT = 1
 
-    /** Un archivo de copia no debería pasar de aquí: unas 3000 filas de historial caben de sobra. */
     const val MAX_BYTES = 8_000_000
 
-    /**
-     * Los ajustes que entran en la copia y su tipo: b = sí/no, i = número, s = texto.
-     * Cada ajuste nuevo de [Prefs] que deba viajar tiene que añadirse aquí. Quedan fuera los que dependen de este móvil
-     * o de la hora (la carpeta elegida, cuándo se buscó una versión nueva, el último enlace copiado).
-     */
+    // Solo viajan ajustes portables. Los datos ligados al dispositivo o a la hora quedan fuera.
     val KEYS: Map<String, Char> = mapOf(
         "quick_direct" to 'b', "quick_kind" to 's', "quick_height" to 'i', "audio_format" to 's', "audio_bitrate" to 'i',
         "auto_photo_video" to 'b', "remember_song" to 'b', "song_seconds" to 'i', "app_update_check" to 'b',
@@ -34,7 +22,7 @@ object SettingsBackup {
         "follow_system_mode" to 'b', "palette_dark" to 's', "palette_light" to 's', "language" to 's', "site_rules" to 's', "follow_wifi" to 'b', "share_options" to 'b',
     )
 
-    /** En qué pestaña de Ajustes vive cada ajuste: sirve para decir qué cambia un perfil antes de importarlo. */
+    // La vista previa agrupa los cambios por pestaña.
     enum class Group { DOWNLOADS, QUEUE, SITES, ADVANCED, APPEARANCE, LANGUAGE, UPDATES, ABOUT }
 
     fun groupOf(key: String): Group = when (key) {
@@ -48,15 +36,11 @@ object SettingsBackup {
         else -> Group.DOWNLOADS
     }
 
-    /** Lo que se ve al revisar un archivo antes de importarlo. */
     sealed interface Check {
-        /** No es un perfil de QuietDLP (o está dañado). */
         data object NotAProfile : Check
 
-        /** Lo hizo una versión más nueva de QuietDLP que esta. */
         data object FromNewerVersion : Check
 
-        /** [values] son los ajustes que sirven; [history] y [follows] cuántos elementos trae de cada uno. */
         data class Ready(val values: Map<String, Any>, val history: Int, val follows: Int) : Check
     }
 
@@ -70,7 +54,6 @@ object SettingsBackup {
         return Check.Ready(values, decodeHistory(json).size, decodeFollows(json).size)
     }
 
-    /** Qué ajustes del perfil son distintos de los de ahora, agrupados por pestaña. Los que ya coinciden no cuentan. */
     fun changes(values: Map<String, Any>, current: Map<String, *>): Map<Group, Int> {
         val out = LinkedHashMap<Group, Int>()
         for ((key, v) in values) {
@@ -88,7 +71,6 @@ object SettingsBackup {
         else -> false
     }
 
-    /** Escribe los ajustes conocidos que tengan el tipo esperado y, si se da, el historial (sin lo que está en curso). */
     fun encode(values: Map<String, *>, history: List<DownloadItem> = emptyList(), follows: List<FollowedPage> = emptyList()): String {
         val settings = JSONObject()
         KEYS.forEach { (key, type) ->
@@ -98,7 +80,7 @@ object SettingsBackup {
         val root = JSONObject().put("app", APP).put("format", FORMAT).put("settings", settings)
         val done = history.filterNot { it.isActive }
         if (done.isNotEmpty()) root.put("history", JSONArray(HistoryJson.encode(done)))
-        // Las páginas seguidas van sin lo pendiente ni lo ya visto: al volver a ponerlas se da por visto lo que haya.
+        // Al restaurar una página, lo que ya existe se da por visto.
         if (follows.isNotEmpty()) root.put("follows", JSONArray(FollowJson.encode(follows.map { it.copy(pending = emptyList(), lastError = null, counter = 0) })))
         return root.toString(2)
     }
@@ -108,19 +90,16 @@ object SettingsBackup {
         return if (root.optString("app") == APP && root.optInt("format", 0) in 1..FORMAT) root else null
     }
 
-    /** El historial del archivo (vacío si no trae o si no es una copia de QuietDLP). */
     fun decodeHistory(json: String): List<DownloadItem> {
         val rows = parse(json)?.optJSONArray("history") ?: return emptyList()
         return HistoryJson.decode(rows.toString())
     }
 
-    /** Las páginas seguidas del archivo (vacío si no trae). */
     fun decodeFollows(json: String): List<FollowedPage> {
         val rows = parse(json)?.optJSONArray("follows") ?: return emptyList()
         return FollowJson.decode(rows.toString())
     }
 
-    /** Los ajustes del archivo que sirven; null si no es una copia de QuietDLP. */
     fun decode(json: String): Map<String, Any>? {
         val root = parse(json) ?: return null
         val settings = root.optJSONObject("settings") ?: return null

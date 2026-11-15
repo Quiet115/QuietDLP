@@ -1,15 +1,11 @@
 package com.quietdlp.app.data
 
-/**
- * Lo que se descarga por defecto (con "Compartir" y con el enlace copiado).
- * [ASK] = preguntar cada vez: abre la app para elegir ese enlace.
- */
+// Este modo se aplica al compartir y a los enlaces copiados.
 enum class DownloadMode(val key: String, val label: String, val quality: Quality?) {
     BEST_VIDEO("best_video", "Video · best", Quality(Kind.VIDEO)),
     VIDEO_1080("video_1080", "Video · 1080p", Quality(Kind.VIDEO, maxHeight = 1080)),
     VIDEO_720("video_720", "Video · 720p", Quality(Kind.VIDEO, maxHeight = 720)),
-    // Audio: una entrada por cada opción de [AudioOptions], en el mismo orden (mejor calidad primero).
-    // Las claves "music_best" y "music_mp3" vienen de versiones anteriores y se conservan.
+        // Se conservan las claves antiguas music_best y music_mp3 para leer preferencias existentes.
     AUDIO_ORIGINAL("audio_original", "Audio · Original", Quality(Kind.AUDIO, audioFormat = "best")),
     AUDIO_FLAC("audio_flac", "Audio · FLAC", Quality(Kind.AUDIO, audioFormat = "flac")),
     AUDIO_ALAC("audio_alac", "Audio · ALAC", Quality(Kind.AUDIO, audioFormat = "alac")),
@@ -23,17 +19,13 @@ enum class DownloadMode(val key: String, val label: String, val quality: Quality
     AUDIO_OPUS_64("audio_opus_64", "Audio · Opus 64k", Quality(Kind.AUDIO, audioFormat = "opus", audioBitrate = 64)),
     ASK("ask", "Ask each time", null);
 
-    /** La opción de audio de este modo, o null si es de vídeo o "preguntar". */
     val audio: AudioOption?
         get() = quality?.takeIf { it.kind == Kind.AUDIO }?.let { AudioOptions.find(it.audioFormat, it.audioBitrate) }
 
     companion object {
         fun fromKey(key: String?): DownloadMode? = entries.firstOrNull { it.key == key }
 
-        /**
-         * Versiones anteriores guardaban un interruptor ("descarga directa") y la calidad por separado.
-         * Se convierten una sola vez al nuevo modo.
-         */
+    // Las preferencias antiguas separaban la descarga directa de la calidad.
         fun fromLegacy(direct: Boolean, kind: Kind, maxHeight: Int, audioFormat: String): DownloadMode = when {
             !direct -> ASK
             kind == Kind.AUDIO -> if (audioFormat == "mp3") MUSIC_MP3 else MUSIC_BEST

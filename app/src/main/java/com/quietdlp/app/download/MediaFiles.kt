@@ -6,7 +6,6 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import java.io.File
 
-/** Comprueba y borra los archivos que la app guardó en la galería. */
 object MediaFiles {
     fun exists(ctx: Context, uri: String): Boolean = runCatching {
         val u = Uri.parse(uri)
@@ -27,10 +26,7 @@ object MediaFiles {
         return !exists(ctx, uri)
     }
 
-    /**
-     * ¿Hay en el álbum de la app (galería o música) un archivo cuyo nombre empieza igual que este título?
-     * Es una consulta rápida y solo sirve como aviso: si el nombre cambió al guardarse, simplemente no encuentra nada.
-     */
+    // El nombre solo da un aviso orientativo. Si el archivo cambió de nombre, puede no coincidir.
     fun existsByName(ctx: Context, title: String): Boolean = runCatching {
         val folder = com.quietdlp.app.data.Prefs(ctx).folderName
         val prefix = title.replace(Regex("""[<>:"/\\|?*\p{Cntrl}]"""), "").trim().take(40)
