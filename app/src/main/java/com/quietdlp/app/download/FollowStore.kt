@@ -62,7 +62,7 @@ object FollowStore {
         save()
     }
 
-    private fun seenFile(id: String): File? = dir?.let { File(it, "$id.seen") }
+    private fun seenFile(id: String): File? = if (FollowJson.isSafeId(id)) dir?.let { File(it, "$id.seen") } else null
 
     /** Lo ya visto de la página (cargado una vez; se va ampliando con [addSeen]). */
     @Synchronized

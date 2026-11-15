@@ -43,7 +43,9 @@ data class TrimRange(val startSec: Int, val endSec: Int) {
             val n = parts.map { it.toInt() }
             // Los minutos y los segundos que van detrás de otro número no pasan de 59.
             if (n.drop(1).any { it > 59 }) return null
-            return n.fold(0) { acc, v -> acc * 60 + v }
+            // Se suma en Long: seis dígitos de horas desbordarían un Int.
+            val total = n.fold(0L) { acc, v -> acc * 60 + v }
+            return if (total <= Int.MAX_VALUE) total.toInt() else null
         }
 
         fun choose(start: Int, end: Int, duration: Int): TrimRange? {

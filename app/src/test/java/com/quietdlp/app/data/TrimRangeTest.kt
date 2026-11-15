@@ -37,11 +37,13 @@ class TrimRangeTest {
         assertEquals(0, TrimRange.parseTime("0"))
         assertEquals(125, TrimRange.parseTime("125")) // segundos sueltos pueden pasar de 59
         assertEquals(185, TrimRange.parseTime("3:05"))
+        assertEquals(Int.MAX_VALUE, TrimRange.parseTime("596523:14:07")) // el mayor valor que cabe
+        assertNull(TrimRange.parseTime("596523:14:08")) // 2147483648 s: un segundo de más
     }
 
     @Test
     fun nonsenseTimesAreRejected() {
-        listOf("", " ", "abc", "1:60", "1:2:3:4", "1::3", "-5", "1.5", "1:30s", ":30", "99999999").forEach {
+        listOf("", " ", "abc", "1:60", "1:2:3:4", "1::3", "-5", "1.5", "1:30s", ":30", "99999999", "999999:59:59", "596523:14:08").forEach {
             assertNull(it, TrimRange.parseTime(it))
         }
     }

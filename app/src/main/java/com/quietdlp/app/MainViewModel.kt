@@ -82,6 +82,7 @@ import com.quietdlp.app.download.Errors
 import com.quietdlp.app.download.UrlUtils
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -1571,7 +1572,8 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         var added = 0
         for (p in restored) {
             if (FollowStore.pages.value.any { it.url == p.url }) continue
-            val id = if (FollowStore.get(p.id) == null) p.id else UUID.randomUUID().toString().take(8)
+            // Un id nuevo evita que el archivo importado elija nombres de archivo.
+            val id = UUID.randomUUID().toString().take(8)
             FollowStore.add(p.copy(id = id, lastCheck = now, pending = emptyList(), lastError = null, counter = 0))
             added++
         }
@@ -1605,16 +1607,18 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
         val preview = profilePreview ?: return
         profilePreview = null
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
+            val failure = withContext(Dispatchers.IO) {
                 runCatching {
                     prefs.importSettings(preview.json)
                     if (withData) {
                         DownloadRepository.mergeHistory(app, SettingsBackup.decodeHistory(preview.json))
                         restoreFollows(SettingsBackup.decodeFollows(preview.json))
                     }
-                }
+                }.exceptionOrNull()
             }
-            profileApplied = true
+            if (failure is CancellationException) throw failure
+            if (failure == null) profileApplied = true
+            else backupMessage = Strings.get(R.string.main_view_model_couldn_t_restore, failure.message)
         }
     }
 

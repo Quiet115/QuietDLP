@@ -158,6 +158,9 @@ object FollowJson {
         return arr.toString()
     }
 
+    // El id da nombre a un archivo, así que solo se admiten letras, cifras y guiones.
+    fun isSafeId(id: String): Boolean = id.length in 1..64 && id.all { it.isLetterOrDigit() && it.code < 128 || it == '-' || it == '_' }
+
     fun decode(json: String): List<FollowedPage> {
         val arr = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
         return (0 until arr.length()).mapNotNull { n ->
@@ -165,7 +168,7 @@ object FollowJson {
                 val o = arr.getJSONObject(n)
                 val pend = o.optJSONArray("pending")
                 FollowedPage(
-                    id = o.getString("id"),
+                    id = o.getString("id").also { require(isSafeId(it)) },
                     url = o.getString("url"),
                     title = o.optString("title").ifBlank { o.getString("url") },
                     thumbnail = o.optString("thumb").takeIf { it.startsWith("http") },

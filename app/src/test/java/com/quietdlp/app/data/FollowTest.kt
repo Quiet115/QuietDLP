@@ -1,5 +1,7 @@
 package com.quietdlp.app.data
 
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -85,6 +87,18 @@ class FollowTest {
         assertNull(back[1].lastError)
         assertNull(back[1].thumbnail)
         assertEquals("follow-ab12", back[0].groupId)
+    }
+
+    @Test
+    fun idsThatCouldPointOutsideTheFollowFolderAreDropped() {
+        listOf("../x", "a/b", "a\\b", "..", "", "a.b", "a b", "é", "x".repeat(65)).forEach {
+            assertTrue(it, !FollowJson.isSafeId(it))
+            val json = JSONArray().put(JSONObject().put("id", it).put("url", "https://x.test/c")).toString()
+            assertTrue(it, FollowJson.decode(json).isEmpty())
+        }
+        listOf("ab12", "3f9c2d1e", "123e4567-e89b-12d3-a456-426614174000", "a_b").forEach {
+            assertTrue(it, FollowJson.isSafeId(it))
+        }
     }
 
     @Test
