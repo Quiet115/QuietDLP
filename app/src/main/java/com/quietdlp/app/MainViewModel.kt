@@ -605,7 +605,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
     }
 
     private fun showBannerOnce() {
-        if (bannerShownThisProcess) return
+        if (!appUpdateEnabled || bannerShownThisProcess) return
         bannerShownThisProcess = true
         updateBannerStartedAt = SystemClock.elapsedRealtime()
     }

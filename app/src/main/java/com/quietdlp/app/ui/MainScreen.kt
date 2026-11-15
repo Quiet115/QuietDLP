@@ -158,7 +158,7 @@ fun MainScreen(vm: MainViewModel) {
         }
     }
 
-    val notice = rememberUpdateNotice(vm.updateBannerStartedAt, vm.appUpdateBusy, vm::closeUpdateBanner)
+    val notice = rememberUpdateNotice(vm.updateBannerStartedAt, vm::closeUpdateBanner)
     Column(Modifier.fillMaxSize()) {
     Box(
         Modifier.weight(1f).fillMaxWidth().let {

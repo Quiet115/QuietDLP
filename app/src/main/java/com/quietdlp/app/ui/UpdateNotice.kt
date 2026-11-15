@@ -12,6 +12,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -21,7 +23,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -31,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,15 +63,16 @@ private fun rememberReducedMotion(): Boolean {
 class UpdateNoticeUi(val visible: Boolean, val fraction: Float, val secondsLeft: Int)
 
 @Composable
-fun rememberUpdateNotice(startedAt: Long, busy: Boolean, onExpired: () -> Unit): UpdateNoticeUi {
+fun rememberUpdateNotice(startedAt: Long, onExpired: () -> Unit): UpdateNoticeUi {
     val active = startedAt != 0L
     val reduced = rememberReducedMotion()
-    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    var now by remember(startedAt) { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    val expire by rememberUpdatedState(onExpired)
     LaunchedEffect(startedAt, reduced) {
         while (startedAt != 0L) {
             now = SystemClock.elapsedRealtime()
-            if (UpdateNoticeTimer.remainingMs(startedAt, now) <= 0L && !busy) {
-                onExpired()
+            if (UpdateNoticeTimer.remainingMs(startedAt, now) <= 0L) {
+                expire()
                 break
             }
             delay(if (reduced) 250L else 33L)
@@ -78,9 +81,10 @@ fun rememberUpdateNotice(startedAt: Long, busy: Boolean, onExpired: () -> Unit):
     if (!active) return UpdateNoticeUi(false, 0f, 0)
     var fraction = UpdateNoticeTimer.fraction(startedAt, now)
     if (reduced) fraction = UpdateNoticeTimer.steppedFraction(fraction)
-    return UpdateNoticeUi(true, fraction, UpdateNoticeTimer.secondsLeft(startedAt, now))
+    return UpdateNoticeUi(UpdateNoticeTimer.remainingMs(startedAt, now) > 0L, fraction, UpdateNoticeTimer.secondsLeft(startedAt, now))
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun UpdateNoticeCard(vm: MainViewModel, ui: UpdateNoticeUi) {
     AnimatedVisibility(
@@ -90,7 +94,8 @@ fun UpdateNoticeCard(vm: MainViewModel, ui: UpdateNoticeUi) {
     ) {
         Surface(
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
             tonalElevation = 3.dp,
             shadowElevation = 6.dp,
@@ -103,19 +108,14 @@ fun UpdateNoticeCard(vm: MainViewModel, ui: UpdateNoticeUi) {
                         Strings.get(R.string.update_banner_title),
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
-                if (vm.appUpdateProgress >= 0) {
-                    LinearProgressIndicator(progress = { vm.appUpdateProgress / 100f }, modifier = Modifier.fillMaxWidth())
-                    Text(Strings.get(R.string.main_screen_downloading, vm.appUpdateProgress), style = MaterialTheme.typography.bodySmall)
-                }
-                vm.appUpdateMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Button(onClick = vm::installAppUpdate, enabled = !vm.appUpdateBusy, modifier = Modifier.heightIn(min = 48.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(onClick = { vm.closeUpdateBanner(); vm.installAppUpdate() }, enabled = !vm.appUpdateBusy, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(Strings.get(R.string.update_banner_install))
                     }
-                    TextButton(onClick = vm::closeUpdateBanner, enabled = !vm.appUpdateBusy, modifier = Modifier.heightIn(min = 48.dp)) {
+                    TextButton(onClick = vm::closeUpdateBanner, modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(Strings.get(R.string.update_banner_close))
                     }
                 }
