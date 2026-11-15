@@ -145,6 +145,15 @@ class PalettesTest {
     }
 
     @Test
+    fun followingTheSystemStillUsesMatchingCustomPalettes() {
+        val dark = Palettes.presets.first { it.id == "obsidian" }.copy(id = "custom-dark")
+        val light = Palettes.presets.first { it.id == "paper" }.copy(id = "custom-light")
+        val custom = listOf(dark, light)
+        assertEquals("custom-dark", Palettes.effectiveId("sky", true, true, dark.id, light.id, custom))
+        assertEquals("custom-light", Palettes.effectiveId("sky", true, false, dark.id, light.id, custom))
+    }
+
+    @Test
     fun notFollowingTheSystemKeepsTheChosenPalette() {
         assertEquals("sky", Palettes.effectiveId("sky", false, true, "obsidian", "paper"))
         assertEquals("sunset", Palettes.effectiveId("sunset", false, false, "obsidian", "paper"))
