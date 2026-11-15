@@ -25,21 +25,17 @@ import com.quietdlp.app.Strings
 import com.quietdlp.app.data.SearchEntry
 import com.quietdlp.app.data.SettingsSearch
 
-/**
- * El índice del buscador, a partir del registro [SettingId]. Cada ajuste lleva su título y sus palabras clave en el
- * idioma elegido y en inglés, y el nombre de su pestaña. Se construye al abrir Ajustes.
- */
-internal fun buildSettingsIndex(advanced: Boolean): List<SearchEntry> =
+// El índice se construye al abrir Ajustes, con títulos y términos de los dos idiomas.
+internal fun buildSettingsIndex(advanced: Boolean, text: (Language, Int) -> String = Strings::getInLanguage): List<SearchEntry> =
     SettingId.entries
-        .filter { it.page != SettingsPage.ADVANCED || advanced }
+        .filter { !it.advancedOnly || advanced }
         .map { id ->
             SearchEntry(
                 id = id.name,
-                titles = listOf(Strings.get(id.title), Strings.getEnglish(id.title)),
-                keywords = listOf(
-                    Strings.get(id.keywords), Strings.getEnglish(id.keywords),
-                    Strings.get(id.page.label), Strings.getEnglish(id.page.label),
-                ),
+                titles = Language.entries.map { text(it, id.title) },
+                keywords = Language.entries.flatMap { language ->
+                    listOfNotNull(id.keywords, id.page.label, id.description).map { text(language, it) }
+                },
             )
         }
 

@@ -2,7 +2,7 @@ package com.quietdlp.app.data
 
 import java.text.Normalizer
 
-// Se indexan el idioma elegido y el inglés para permitir búsquedas en ambos.
+// El índice conserva los dos idiomas sin cambiar el que muestra la pantalla.
 data class SearchEntry(
     val id: String,
     val titles: List<String>,

@@ -30,11 +30,11 @@ object Strings {
         return english
     }
 
-    private var english: Context? = null
+    private val searchContexts = mutableMapOf<Language, Context>()
 
-    // El buscador de ajustes consulta también los textos en inglés.
-    fun getEnglish(@StringRes id: Int): String {
-        val ctx = english ?: app.withLanguage(Language.ENGLISH).also { english = it }
+    // El índice consulta ambos idiomas sin cambiar el idioma de la aplicación.
+    fun getInLanguage(language: Language, @StringRes id: Int): String {
+        val ctx = searchContexts.getOrPut(language) { app.withLanguage(language) }
         return ctx.getString(id)
     }
 

@@ -127,7 +127,7 @@ fun PermissionsSection() {
         }
     }
 
-    SectionCard(Strings.get(R.string.settings_permissions), Modifier.settingAnchor(SettingId.PERMISSIONS)) {
+    SectionCard(Strings.get(SettingId.PERMISSIONS.title), Modifier.settingAnchor(SettingId.PERMISSIONS)) {
         for (p in PermissionList.applicable(Build.VERSION.SDK_INT)) {
             val state = remember(refresh, p) { PermissionChecks.state(ctx, p) }
             val name = Strings.get(PermissionChecks.name(p))

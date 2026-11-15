@@ -158,41 +158,41 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             if (current == SettingsPage.DOWNLOADS) {
             SectionCard(Strings.get(R.string.settings_screen_download)) {
                 Column(Modifier.settingAnchor(SettingId.DEFAULT_DOWNLOAD), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(Strings.get(R.string.settings_screen_default_download), style = MaterialTheme.typography.titleSmall)
+                    Text(Strings.get(SettingId.DEFAULT_DOWNLOAD.title), style = MaterialTheme.typography.titleSmall)
                     Hint(Strings.get(R.string.settings_screen_for_share_and_copied_links))
                     ModePicker(vm.mode, includeAsk = true) { vm.changeMode(it) }
                 }
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_remember_last_choice),
+                    Strings.get(SettingId.REMEMBER_LAST.title),
                     if (vm.rememberLast) Strings.get(R.string.settings_screen_links_opened_in_the_app) else Strings.get(R.string.settings_screen_off_starts_from_the_default),
                     vm.rememberLast, vm::changeRememberLast, modifier = Modifier.settingAnchor(SettingId.REMEMBER_LAST))
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_share_option_with_settings),
+                    Strings.get(SettingId.SHARE_OPTIONS.title),
                     if (vm.shareOptions) Strings.get(R.string.settings_screen_share_shows_quietdlp_options_too) else Strings.get(R.string.settings_screen_off),
                     vm.shareOptions, vm::changeShareOptions, modifier = Modifier.settingAnchor(SettingId.SHARE_OPTIONS))
-                SwitchRow(Strings.get(R.string.settings_screen_offer_copied_links), Strings.get(R.string.settings_screen_when_you_open_the_app), vm.clipboardOffer, vm::changeClipboardOffer, modifier = Modifier.settingAnchor(SettingId.CLIPBOARD))
+                SwitchRow(Strings.get(SettingId.CLIPBOARD.title), Strings.get(R.string.settings_screen_when_you_open_the_app), vm.clipboardOffer, vm::changeClipboardOffer, modifier = Modifier.settingAnchor(SettingId.CLIPBOARD))
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_photos_and_galleries),
+                    Strings.get(SettingId.PHOTOS.title),
                     if (vm.photosEnabled) Strings.get(R.string.settings_screen_if_there_s_no_video) else Strings.get(R.string.settings_screen_off),
                     vm.photosEnabled, vm::changePhotosEnabled, modifier = Modifier.settingAnchor(SettingId.PHOTOS))
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_name_music_artist_title),
+                    Strings.get(SettingId.MUSIC_NAMES.title),
                     if (vm.musicNames) Strings.get(R.string.settings_screen_also_fills_the_artist_title) else Strings.get(R.string.settings_screen_off_files_keep_the_video),
                     vm.musicNames, vm::changeMusicNames, modifier = Modifier.settingAnchor(SettingId.MUSIC_NAMES))
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_cover_image_in_music),
+                    Strings.get(SettingId.COVER_AUDIO.title),
                     if (vm.coverAudio) Strings.get(R.string.settings_screen_the_thumbnail_goes_inside_the) else Strings.get(R.string.settings_screen_off),
                     vm.coverAudio, vm::changeCoverAudio, modifier = Modifier.settingAnchor(SettingId.COVER_AUDIO))
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_cover_image_in_videos),
+                    Strings.get(SettingId.COVER_VIDEO.title),
                     if (vm.coverVideo) Strings.get(R.string.settings_screen_the_thumbnail_goes_inside_the_2) else Strings.get(R.string.settings_screen_off),
                     vm.coverVideo, vm::changeCoverVideo, modifier = Modifier.settingAnchor(SettingId.COVER_VIDEO))
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_video_from_photos_and_music),
+                    Strings.get(SettingId.VIDEO_FROM_PHOTOS.title),
                     if (vm.autoPhotoVideo) Strings.get(R.string.settings_screen_makes_the_video_by_itself) else Strings.get(R.string.settings_screen_off_use_make_video_on),
                     vm.autoPhotoVideo, vm::changeAutoPhotoVideo, modifier = Modifier.settingAnchor(SettingId.VIDEO_FROM_PHOTOS))
                 Column(Modifier.settingAnchor(SettingId.SONG_LENGTH), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(Strings.get(R.string.settings_screen_song_length_in_videos), style = MaterialTheme.typography.titleSmall)
+                    Text(Strings.get(SettingId.SONG_LENGTH.title), style = MaterialTheme.typography.titleSmall)
                     Hint(Strings.get(R.string.settings_screen_how_long_the_song_plays))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Slideshow.SONG_LENGTHS.forEach { (seconds, label) ->
@@ -201,11 +201,11 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     }
                 }
                 SwitchRow(
-                    Strings.get(R.string.settings_screen_remember_my_choice),
+                    Strings.get(SettingId.REMEMBER_SONG.title),
                     if (vm.rememberSong) Strings.get(R.string.settings_screen_make_video_saves_the_length) else Strings.get(R.string.settings_screen_off_make_video_starts_from),
                     vm.rememberSong, vm::changeRememberSong, modifier = Modifier.settingAnchor(SettingId.REMEMBER_SONG))
                 Column(Modifier.settingAnchor(SettingId.SAVE_TO), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(Strings.get(R.string.settings_screen_save_to), style = MaterialTheme.typography.titleSmall)
+                    Text(Strings.get(SettingId.SAVE_TO.title), style = MaterialTheme.typography.titleSmall)
                     Hint(
                         if (vm.folderUri.isEmpty()) Strings.get(R.string.settings_screen_gallery_album_music_in_music, vm.folderName, vm.folderName)
                         else "${folderLabel(vm.folderUri)} › ${vm.folderName}",
@@ -246,7 +246,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             SectionCard(Strings.get(R.string.settings_screen_updates)) {
                 Text(Strings.get(R.string.settings_screen_quietdlp, AppUpdater.currentVersion(ctx)), style = MaterialTheme.typography.titleSmall)
                 if (AppUpdater.isConfigured(ctx)) {
-                    SwitchRow(Strings.get(R.string.settings_screen_notify_me_of_new_versions), Strings.get(R.string.update_notify_help), vm.appUpdateEnabled, vm::changeAppUpdateEnabled, modifier = Modifier.settingAnchor(SettingId.UPDATE_NOTIFY))
+                    SwitchRow(Strings.get(SettingId.UPDATE_NOTIFY.title), SettingId.UPDATE_NOTIFY.description?.let { Strings.get(it) }.orEmpty(), vm.appUpdateEnabled, vm::changeAppUpdateEnabled, modifier = Modifier.settingAnchor(SettingId.UPDATE_NOTIFY))
                     OutlinedButton(onClick = { vm.checkAppUpdate(manual = true) }, enabled = !vm.appUpdateBusy) {
                         Text(if (vm.appUpdateBusy) Strings.get(R.string.settings_screen_checking) else Strings.get(R.string.settings_screen_check_now))
                     }
@@ -266,7 +266,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     }
                     Button(onClick = vm::installAppUpdate, enabled = !vm.appUpdateBusy) { Text(Strings.get(R.string.update_banner_install)) }
                 }
-                SwitchRow(Strings.get(R.string.settings_screen_update_the_download_engine_automatically), if (vm.autoUpdate) Strings.get(R.string.settings_screen_on_at_most_once_a) else Strings.get(R.string.settings_screen_off), vm.autoUpdate, vm::changeAutoUpdate, modifier = Modifier.settingAnchor(SettingId.UPDATE_ENGINE))
+                SwitchRow(Strings.get(SettingId.UPDATE_ENGINE.title), if (vm.autoUpdate) Strings.get(R.string.settings_screen_on_at_most_once_a) else Strings.get(R.string.settings_screen_off), vm.autoUpdate, vm::changeAutoUpdate, modifier = Modifier.settingAnchor(SettingId.UPDATE_ENGINE))
                 if (vm.advanced) {
                     Hint(Strings.get(R.string.engine_version, vm.ytdlpVersion ?: Strings.get(R.string.unknown)))
                     OutlinedButton(onClick = vm::updateEngine, enabled = !vm.updating && vm.engineReady) {
@@ -281,7 +281,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             // ───── Solo en modo avanzado ─────
             if (current == SettingsPage.ADVANCED) {
                 var siteAddress by remember { mutableStateOf("") }
-                SectionCard(Strings.get(R.string.settings_screen_sessions), Modifier.settingAnchor(SettingId.SESSIONS)) {
+                SectionCard(Strings.get(SettingId.SESSIONS.title), Modifier.settingAnchor(SettingId.SESSIONS)) {
                     Hint(Strings.get(R.string.settings_screen_for_content_that_requires_signing))
                     OutlinedTextField(
                         value = siteAddress,
@@ -322,7 +322,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                 }
 
                 var errorLog by remember { mutableStateOf(ErrorLog.read(ctx)) }
-                SectionCard(Strings.get(R.string.settings_screen_error_log), Modifier.settingAnchor(SettingId.ERROR_LOG)) {
+                SectionCard(Strings.get(SettingId.ERROR_LOG.title), Modifier.settingAnchor(SettingId.ERROR_LOG)) {
                     val n = ErrorLogText.count(errorLog)
                     Hint(if (n == 0) Strings.get(R.string.settings_screen_no_errors) else if (n == 1) Strings.get(R.string.errors_recent_one) else Strings.get(R.string.errors_recent_many, n))
                     if (n > 0) {
@@ -339,6 +339,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
             }
 
             if (current == SettingsPage.LANGUAGE) {
+                Column(Modifier.settingAnchor(SettingId.LANGUAGE)) {
                 LanguageTab(remember { LanguageStore(ctx).load() }) { chosen ->
                     LanguageStore(ctx).save(chosen)
                     // Se recrea la pantalla para que todos los textos salgan en el idioma nuevo.
@@ -346,9 +347,10 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                     while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
                     (c as? android.app.Activity)?.recreate()
                 }
+                }
             }
-            if (current == SettingsPage.FEATURES) FeaturesTab()
-            if (current == SettingsPage.FEEDBACK) FeedbackTab(remember { LanguageStore(ctx).load() })
+            if (current == SettingsPage.FEATURES) Column(Modifier.settingAnchor(SettingId.FEATURES)) { FeaturesTab() }
+            if (current == SettingsPage.FEEDBACK) Column(Modifier.settingAnchor(SettingId.FEEDBACK)) { FeedbackTab(remember { LanguageStore(ctx).load() }) }
 
             // ───── Apoyo y licencia ─────
             if (current == SettingsPage.ABOUT) {
@@ -365,7 +367,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(Strings.get(R.string.settings_screen_buy_me_a_kebab_5)) }
-                    SwitchRow(Strings.get(R.string.settings_screen_show_the_support_card), Strings.get(R.string.settings_screen_on_the_main_screen_below), vm.supportCard, vm::changeSupportCard, modifier = Modifier.settingAnchor(SettingId.SUPPORT_CARD))
+                    SwitchRow(Strings.get(SettingId.SUPPORT_CARD.title), Strings.get(R.string.settings_screen_on_the_main_screen_below), vm.supportCard, vm::changeSupportCard, modifier = Modifier.settingAnchor(SettingId.SUPPORT_CARD))
                 }
                 Hint(Strings.get(R.string.settings_screen_free_software_gpl_3_0))
             }
@@ -379,10 +381,7 @@ fun SettingsScreen(vm: MainViewModel, onClose: () -> Unit) {
     }
 }
 
-/**
- * Las pestañas de Ajustes, en el orden común de las apps Quiet: primero las propias (Descargas la primera) y luego
- * Apariencia, Actualizaciones y Acerca de (Idioma, Funciones y Comentarios se añaden en sus pasos).
- */
+// Las pestañas propias van primero; las comunes conservan el orden del Quietverso.
 internal enum class SettingsPage(val label: Int) {
     DOWNLOADS(R.string.settings_downloads),
     QUEUE(R.string.settings_queue),
@@ -408,14 +407,14 @@ private fun QueueSection(vm: MainViewModel) {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { restricted = vm.batteryRestricted() }
     SectionCard(Strings.get(R.string.settings_screen_queue)) {
         Column(Modifier.settingAnchor(SettingId.PARALLEL), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(Strings.get(R.string.settings_screen_downloads_at_once), style = MaterialTheme.typography.titleSmall)
+            Text(Strings.get(SettingId.PARALLEL.title), style = MaterialTheme.typography.titleSmall)
             Hint(Strings.get(R.string.settings_screen_if_a_site_starts_refusing))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 (1..Prefs.MAX_PARALLEL).forEach { n -> QuietChip(vm.maxParallel == n, { vm.changeMaxParallel(n) }, "$n") }
             }
         }
         Column(Modifier.settingAnchor(SettingId.NETWORK), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(Strings.get(R.string.settings_screen_network), style = MaterialTheme.typography.titleSmall)
+            Text(Strings.get(SettingId.NETWORK.title), style = MaterialTheme.typography.titleSmall)
             Hint(
                 if (vm.wifiOnly) Strings.get(R.string.settings_screen_downloads_wait_until_you_have)
                 else Strings.get(R.string.settings_screen_on_mobile_data_big_downloads),
@@ -426,7 +425,7 @@ private fun QueueSection(vm: MainViewModel) {
             }
         }
         Column(Modifier.settingAnchor(SettingId.FOLLOW), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(Strings.get(R.string.settings_screen_followed_pages), style = MaterialTheme.typography.titleSmall)
+            Text(Strings.get(SettingId.FOLLOW.title), style = MaterialTheme.typography.titleSmall)
             Hint(
                 if (vm.followWifiOnly) Strings.get(R.string.settings_screen_checks_and_downloads_only_on)
                 else Strings.get(R.string.settings_screen_also_checks_on_mobile_data),
@@ -438,7 +437,7 @@ private fun QueueSection(vm: MainViewModel) {
         }
         SiteKeySection(vm)
         Column(Modifier.settingAnchor(SettingId.MULTI), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(Strings.get(R.string.settings_screen_links_with_several_files), style = MaterialTheme.typography.titleSmall)
+            Text(Strings.get(SettingId.MULTI.title), style = MaterialTheme.typography.titleSmall)
             Hint(if (vm.askMulti) Strings.get(R.string.settings_screen_asks_which_ones_to_download) else Strings.get(R.string.settings_screen_downloads_all_of_them_without))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 QuietChip(vm.askMulti, { vm.changeAskMulti(true) }, Strings.get(R.string.settings_screen_ask_me))
@@ -446,7 +445,7 @@ private fun QueueSection(vm: MainViewModel) {
             }
         }
         Column(Modifier.settingAnchor(SettingId.BATTERY), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(Strings.get(R.string.settings_screen_battery), style = MaterialTheme.typography.titleSmall)
+            Text(Strings.get(SettingId.BATTERY.title), style = MaterialTheme.typography.titleSmall)
             Hint(
                 if (restricted) Strings.get(R.string.settings_screen_android_may_pause_downloads_when)
                 else Strings.get(R.string.settings_screen_no_limits_downloads_keep_going),
@@ -467,7 +466,7 @@ private fun QueueSection(vm: MainViewModel) {
 private fun SitesSection(vm: MainViewModel) {
     var editing by remember { mutableStateOf<SiteRule?>(null) }
     var adding by rememberSaveable { mutableStateOf(false) }
-    SectionCard(Strings.get(R.string.settings_screen_sites), Modifier.settingAnchor(SettingId.SITES)) {
+    SectionCard(Strings.get(SettingId.SITES.title), Modifier.settingAnchor(SettingId.SITES)) {
         Hint(Strings.get(R.string.settings_screen_pick_a_website_and_always))
         vm.siteRules.forEach { rule ->
             Row(
@@ -567,7 +566,7 @@ private fun ModePicker(selected: DownloadMode?, includeAsk: Boolean, onPick: (Do
 private fun SiteKeySection(vm: MainViewModel) {
     var dialog by remember { mutableStateOf(false) }
     Column(Modifier.settingAnchor(SettingId.SITE_KEYS), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(Strings.get(R.string.settings_screen_site_keys), style = MaterialTheme.typography.titleSmall)
+        Text(Strings.get(SettingId.SITE_KEYS.title), style = MaterialTheme.typography.titleSmall)
         Hint(if (vm.keySet) Strings.get(R.string.settings_screen_key_saved) else Strings.get(R.string.settings_screen_no_key))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { dialog = true }) { Text(if (vm.keySet) Strings.get(R.string.settings_screen_change_key) else Strings.get(R.string.settings_screen_add_key)) }
@@ -613,7 +612,7 @@ private fun OfficialSource() {
         Toast.makeText(ctx, Strings.get(R.string.settings_screen_copied), Toast.LENGTH_SHORT).show()
     }
     Column(Modifier.settingAnchor(SettingId.OFFICIAL_SOURCE), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(Strings.get(R.string.settings_screen_official_source), style = MaterialTheme.typography.titleSmall)
+        Text(Strings.get(SettingId.OFFICIAL_SOURCE.title), style = MaterialTheme.typography.titleSmall)
         Hint(Strings.get(R.string.settings_screen_quietdlp_is_only_on_github))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = {
@@ -640,7 +639,7 @@ private fun OfficialSource() {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NameSection(vm: MainViewModel) {
-    SectionCard(Strings.get(R.string.settings_screen_file_names), Modifier.settingAnchor(SettingId.FILE_NAMES)) {
+    SectionCard(Strings.get(SettingId.FILE_NAMES.title), Modifier.settingAnchor(SettingId.FILE_NAMES)) {
         Hint(Strings.get(R.string.settings_screen_how_downloaded_files_are_named))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FileNameTemplate.PRESETS.forEach { (label, template) ->
@@ -680,8 +679,8 @@ private fun BackupSection(vm: MainViewModel) {
             }
         }
     }
-    SectionCard(Strings.get(R.string.profile_title), Modifier.settingAnchor(SettingId.BACKUP)) {
-        Hint(Strings.get(R.string.profile_help))
+    SectionCard(Strings.get(SettingId.BACKUP.title), Modifier.settingAnchor(SettingId.BACKUP)) {
+        Hint(SettingId.BACKUP.description?.let { Strings.get(it) }.orEmpty())
         Hint(Strings.get(R.string.profile_not_included))
         SwitchRow(Strings.get(R.string.profile_with_data), Strings.get(R.string.profile_with_data_help), withData, { withData = it })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -746,15 +745,15 @@ private fun folderLabel(uri: String): String = runCatching {
 private fun AppearanceSection(vm: MainViewModel) {
     var editing by remember { mutableStateOf<PaletteSpec?>(null) }
     var creating by rememberSaveable { mutableStateOf(false) }
-    SectionCard(Strings.get(R.string.settings_screen_appearance), Modifier.settingAnchor(SettingId.APPEARANCE)) {
+    SectionCard(Strings.get(SettingId.APPEARANCE.title), Modifier.settingAnchor(SettingId.APPEARANCE)) {
         Text(Strings.get(R.string.settings_screen_screen_orientation), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AppOrientation.entries.forEach { o -> QuietChip(vm.orientation == o, { vm.changeOrientation(o) }, Strings.tr(o.label)) }
         }
         Hint(Strings.get(R.string.settings_screen_auto_follows_your_phone_s))
         SwitchRow(
-            Strings.get(R.string.follow_system_mode),
-            Strings.get(R.string.follow_system_mode_help),
+            Strings.get(SettingId.FOLLOW_SYSTEM.title),
+            SettingId.FOLLOW_SYSTEM.description?.let { Strings.get(it) }.orEmpty(),
             vm.followSystemMode, vm::changeFollowSystemMode,
             modifier = Modifier.settingAnchor(SettingId.FOLLOW_SYSTEM),
         )

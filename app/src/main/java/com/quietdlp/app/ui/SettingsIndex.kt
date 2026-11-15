@@ -26,7 +26,13 @@ import kotlinx.coroutines.delay
  * sus palabras clave) y de aquí salen el índice del buscador y los puntos a los que salta la pantalla
  * ([settingAnchor]). Los textos están en recursos, en los dos idiomas.
  */
-internal enum class SettingId(val page: SettingsPage, @StringRes val title: Int, @StringRes val keywords: Int) {
+internal enum class SettingId(
+    val page: SettingsPage,
+    @StringRes val title: Int,
+    @StringRes val keywords: Int,
+    val advancedOnly: Boolean = page == SettingsPage.ADVANCED,
+    @StringRes val description: Int? = null,
+) {
     DEFAULT_DOWNLOAD(SettingsPage.DOWNLOADS, R.string.settings_screen_default_download, R.string.kw_default_download),
     REMEMBER_LAST(SettingsPage.DOWNLOADS, R.string.settings_screen_remember_last_choice, R.string.kw_remember_last),
     SHARE_OPTIONS(SettingsPage.DOWNLOADS, R.string.settings_screen_share_option_with_settings, R.string.kw_share_options),
@@ -46,15 +52,15 @@ internal enum class SettingId(val page: SettingsPage, @StringRes val title: Int,
     SITE_KEYS(SettingsPage.QUEUE, R.string.settings_screen_site_keys, R.string.kw_site_keys),
     BATTERY(SettingsPage.QUEUE, R.string.settings_screen_battery, R.string.kw_battery),
     SITES(SettingsPage.SITES, R.string.settings_screen_sites, R.string.kw_sites),
-    BACKUP(SettingsPage.BACKUP, R.string.settings_screen_backup, R.string.kw_backup),
-    FILE_NAMES(SettingsPage.ADVANCED, R.string.settings_screen_file_names, R.string.kw_file_names),
+    BACKUP(SettingsPage.BACKUP, R.string.profile_title, R.string.kw_backup, description = R.string.profile_help),
+    FILE_NAMES(SettingsPage.DOWNLOADS, R.string.settings_screen_file_names, R.string.kw_file_names, advancedOnly = true),
     SESSIONS(SettingsPage.ADVANCED, R.string.settings_screen_sessions, R.string.kw_sessions),
     ERROR_LOG(SettingsPage.ADVANCED, R.string.settings_screen_error_log, R.string.kw_error_log),
     PERMISSIONS(SettingsPage.PERMISSIONS, R.string.settings_permissions, R.string.kw_permissions),
     APPEARANCE(SettingsPage.APPEARANCE, R.string.settings_screen_appearance, R.string.kw_appearance),
-    FOLLOW_SYSTEM(SettingsPage.APPEARANCE, R.string.follow_system_mode, R.string.kw_follow_system),
+    FOLLOW_SYSTEM(SettingsPage.APPEARANCE, R.string.follow_system_mode, R.string.kw_follow_system, description = R.string.follow_system_mode_help),
     LANGUAGE(SettingsPage.LANGUAGE, R.string.settings_language, R.string.kw_language),
-    UPDATE_NOTIFY(SettingsPage.UPDATES, R.string.settings_screen_notify_me_of_new_versions, R.string.kw_update_notify),
+    UPDATE_NOTIFY(SettingsPage.UPDATES, R.string.settings_screen_notify_me_of_new_versions, R.string.kw_update_notify, description = R.string.update_notify_help),
     UPDATE_ENGINE(SettingsPage.UPDATES, R.string.settings_screen_update_the_download_engine_automatically, R.string.kw_update_engine),
     FEATURES(SettingsPage.FEATURES, R.string.settings_features, R.string.kw_features),
     FEEDBACK(SettingsPage.FEEDBACK, R.string.settings_feedback, R.string.kw_feedback),
