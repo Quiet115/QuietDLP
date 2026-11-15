@@ -1537,6 +1537,7 @@ class MainViewModel(private val app: Application) : AndroidViewModel(app) {
                 }.getOrElse {
                     if (it is CancellationException) throw it
                     if (it is SettingsBackup.TooLarge) Strings.get(R.string.profile_export_too_large)
+                    else if (it is SettingsBackup.InvalidData) Strings.get(R.string.profile_not_valid)
                     else Strings.get(R.string.main_view_model_couldn_t_save, it.message)
                 }
             }

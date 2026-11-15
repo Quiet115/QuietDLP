@@ -87,6 +87,46 @@ class SettingsBackupTest {
     }
 
     @Test
+    fun conversionSourcesAndLocalThumbnailsDoNotTravelBetweenPhones() {
+        val local = row("conversion", State.DONE).copy(url = CONVERT_URL_PREFIX + "file:///synthetic/source",
+            thumbnail = "file:///synthetic/thumbnail")
+        val json = SettingsBackup.encode(emptyMap<String, Any?>(), listOf(local))
+        assertFalse(json.contains("/synthetic/"))
+        val oldProfile = JSONObject(json)
+        oldProfile.getJSONArray("history").getJSONObject(0)
+            .put("url", CONVERT_URL_PREFIX + "file:///synthetic/source")
+            .put("thumb", "file:///synthetic/thumbnail")
+        val restored = SettingsBackup.decodeHistory(oldProfile.toString()).single()
+        assertEquals(CONVERT_URL_PREFIX, restored.url)
+        assertNull(restored.thumbnail)
+    }
+
+    @Test
+    fun importedDownloadAndFollowLinksMustBeWebLinks() {
+        val root = JSONObject(SettingsBackup.encode(emptyMap<String, Any?>(), listOf(row("a", State.DONE))))
+        root.getJSONArray("history").getJSONObject(0).put("url", "file:///synthetic/source")
+        assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check(root.toString()))
+        val followed = JSONObject(SettingsBackup.encode(emptyMap<String, Any?>(), follows = listOf(FollowedPage("p", "https://example.com/page", "Page"))))
+        followed.getJSONArray("follows").getJSONObject(0).put("url", "content://synthetic/source")
+        assertEquals(SettingsBackup.Check.NotAProfile, SettingsBackup.check(followed.toString()))
+    }
+
+    @Test
+    fun exportedFollowedPagesRoundTripWithoutPendingItemsOrErrors() {
+        val page = FollowedPage("page", "https://example.com/page", "Page", thumbnail = "file:///synthetic/page-thumb", lastError = "synthetic error",
+            counter = 10, pending = listOf(PlaylistEntry("https://example.com/item", "Item", null)))
+        val json = SettingsBackup.encode(mapOf("language" to "es"), follows = listOf(page))
+        assertFalse(json.contains("/synthetic/"))
+        val ready = SettingsBackup.check(json) as SettingsBackup.Check.Ready
+        assertEquals(1, ready.follows)
+        val restored = SettingsBackup.decodeFollows(json).single()
+        assertEquals(page.url, restored.url)
+        assertTrue(restored.pending.isEmpty())
+        assertNull(restored.lastError)
+        assertEquals(0, restored.counter)
+    }
+
+    @Test
     fun aProfileOverTheByteLimitIsRejectedBeforeItCanBeImported() {
         val json = SettingsBackup.encode(emptyMap<String, Any?>()).dropLast(1) +
             ",\"padding\":\"" + "é".repeat(SettingsBackup.MAX_BYTES / 2) + "\"}"
@@ -137,7 +177,7 @@ class SettingsBackupTest {
     }
 
     @Test
-    fun anEmptyBackupIsValidAndChangesNothing() {
+    fun anEmptySettingsObjectIsAValidProfile() {
         assertTrue(SettingsBackup.decode("""{"app":"QuietDLP","format":1,"settings":{}}""")!!.isEmpty())
     }
 

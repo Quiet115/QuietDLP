@@ -68,7 +68,7 @@
     <string name="feature_history_title">History</string>
     <string name="feature_history_body">Share, delete, a warning for repeated links and automatic retry when the connection drops.</string>
     <string name="feature_backup_title">Backup</string>
-    <string name="feature_backup_body">Transfer settings to another phone. History and followed pages are optional; file access and sessions stay on the original phone.</string>
+    <string name="feature_backup_body">Transfer settings, with optional history and followed pages. File access and sessions stay on each phone.</string>
     <string name="feature_updates_title">Updates</string>
     <string name="feature_updates_body">yt-dlp, gallery-dl and the app itself can update by themselves. You can turn it off.</string>
     <string name="feature_appearance_title">Appearance</string>

@@ -11,6 +11,7 @@ object SettingsBackup {
     const val MAX_BYTES = 8_000_000
 
     class TooLarge : IllegalArgumentException()
+    class InvalidData : IllegalArgumentException()
 
     // Solo viajan ajustes portables. Los datos ligados al dispositivo o a la hora quedan fuera.
     val KEYS: Map<String, Char> = mapOf(
@@ -86,11 +87,14 @@ object SettingsBackup {
         val root = JSONObject().put("app", APP).put("format", FORMAT).put("settings", settings)
         val done = history.filterNot { it.isActive }
         if (done.size > HistoryJson.MAX_ITEMS) throw TooLarge()
-        if (done.isNotEmpty()) root.put("history", JSONArray(HistoryJson.encode(done.map { it.copy(savedUris = emptyList()) })))
+        if (done.isNotEmpty()) root.put("history", JSONArray(HistoryJson.encode(done.map(::portableHistoryItem))))
         // Al restaurar una página, lo que ya existe se da por visto.
-        if (follows.isNotEmpty()) root.put("follows", JSONArray(FollowJson.encode(follows.map { it.copy(pending = emptyList(), lastError = null, counter = 0) })))
+        if (follows.isNotEmpty()) root.put("follows", JSONArray(FollowJson.encode(follows.map {
+            it.copy(thumbnail = it.thumbnail?.takeIf(::isWebLink), pending = emptyList(), lastError = null, counter = 0)
+        })))
         return root.toString(2).also {
             if (it.toByteArray(Charsets.UTF_8).size > MAX_BYTES) throw TooLarge()
+            if (parse(it) == null) throw InvalidData()
         }
     }
 
@@ -101,11 +105,14 @@ object SettingsBackup {
         if (root.optString("app") != APP || format !in 1..FORMAT || root.optJSONObject("settings") == null) return null
         if (root.has("history")) {
             val rows = root.optJSONArray("history") ?: return null
-            if (rows.length() > HistoryJson.MAX_ITEMS || HistoryJson.decode(rows.toString()).size != rows.length()) return null
+            val history = HistoryJson.decode(rows.toString())
+            if (rows.length() > HistoryJson.MAX_ITEMS || history.size != rows.length() ||
+                history.any { !isWebLink(it.url) && !it.url.startsWith(CONVERT_URL_PREFIX) }) return null
         }
         if (root.has("follows")) {
             val rows = root.optJSONArray("follows") ?: return null
-            if (FollowJson.decode(rows.toString()).size != rows.length()) return null
+            val follows = FollowJson.decode(rows.toString())
+            if (follows.size != rows.length() || follows.any { !isWebLink(it.url) }) return null
         }
         return root
     }
@@ -113,8 +120,19 @@ object SettingsBackup {
     fun decodeHistory(json: String): List<DownloadItem> {
         val rows = parse(json)?.optJSONArray("history") ?: return emptyList()
         // Incluso las copias antiguas son datos externos, no autorización para actuar sobre archivos.
-        return HistoryJson.decode(rows.toString()).distinctBy { it.id }.map { it.copy(savedUris = emptyList()) }
+        return HistoryJson.decode(rows.toString()).distinctBy { it.id }.map(::portableHistoryItem)
     }
+
+    private fun portableHistoryItem(item: DownloadItem): DownloadItem = item.copy(
+        savedUris = emptyList(),
+        url = if (item.url.startsWith(CONVERT_URL_PREFIX)) CONVERT_URL_PREFIX else item.url,
+        thumbnail = item.thumbnail?.takeIf(::isWebLink),
+    )
+
+    private fun isWebLink(value: String): Boolean = runCatching {
+        val uri = java.net.URI(value)
+        uri.scheme?.lowercase() in listOf("http", "https") && !uri.rawAuthority.isNullOrBlank()
+    }.getOrDefault(false)
 
     fun decodeFollows(json: String): List<FollowedPage> {
         val rows = parse(json)?.optJSONArray("follows") ?: return emptyList()
